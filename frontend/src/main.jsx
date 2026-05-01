@@ -1,367 +1,266 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { ArrowLeft, ArrowRight, HelpCircle, Moon, ShieldCheck, Sun } from 'lucide-react';
+import { AppStateProvider, useAppState } from './state/AppState';
 import {
-  AlertTriangle,
-  ArrowRight,
-  Bot,
-  CheckCircle2,
-  IndianRupee,
-  Moon,
-  Search,
-  Send,
-  ShieldCheck,
-  Sparkles,
-  Sun,
-  TrendingUp
-} from 'lucide-react';
+  AddRowButton,
+  BreakdownPanel,
+  Button,
+  Card,
+  FundCard,
+  FundInputRow,
+  GrowthChart,
+  RecommendationBadge,
+  SummaryCard
+} from './components/ui';
+import { analyzePortfolio, formatInr, generateExplanation } from './utils/analysisEngine';
 import './styles.css';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+function navigate(path) {
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
 
-const formatInr = (value) =>
-  new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0
-  }).format(Number(value || 0));
+function useRoute() {
+  const [path, setPath] = useState(window.location.pathname);
+  useEffect(() => {
+    const handler = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, []);
+  return path;
+}
 
 function useTheme() {
   const [theme, setTheme] = useState(() => localStorage.getItem('switchwise-theme') || 'light');
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.dataset.theme = theme;
     localStorage.setItem('switchwise-theme', theme);
   }, [theme]);
   return [theme, setTheme];
 }
 
-function App() {
+function AppShell() {
+  const path = useRoute();
   const [theme, setTheme] = useTheme();
-  const [goalType, setGoalType] = useState('wealth');
-  const [riskComfort, setRiskComfort] = useState(3);
-  const [horizonYears, setHorizonYears] = useState(10);
-  const [amount, setAmount] = useState(300000);
-  const [monthlyContribution, setMonthlyContribution] = useState(10000);
-  const [currentVariant, setCurrentVariant] = useState('regular');
-  const [query, setQuery] = useState('hdfc');
-  const [searchResults, setSearchResults] = useState([]);
-  const [selectedHolding, setSelectedHolding] = useState(null);
-  const [advice, setAdvice] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [health, setHealth] = useState(null);
-  const [chat, setChat] = useState([
-    {
-      role: 'assistant',
-      text: 'Tell me your goal and current fund. I will diagnose whether to switch, what to buy next, and what needs verification before acting.'
-    }
-  ]);
-  const [chatInput, setChatInput] = useState('');
-
-  const selectedRecommendation = advice?.recommendations?.[0];
-  const candidates = advice?.discovery?.candidates || [];
-
-  useEffect(() => {
-    fetch(`${API_BASE}/api/health`).then((res) => res.json()).then(setHealth).catch(() => setHealth(null));
-  }, []);
-
-  useEffect(() => {
-    const timeout = setTimeout(async () => {
-      const response = await fetch(`${API_BASE}/api/funds/search?q=${encodeURIComponent(query)}&limit=12`);
-      const data = await response.json();
-      setSearchResults(data.funds || []);
-      if (!selectedHolding && data.funds?.[0]) setSelectedHolding(data.funds[0]);
-    }, 250);
-    return () => clearTimeout(timeout);
-  }, [query, selectedHolding]);
-
-  async function runCopilot() {
-    setLoading(true);
-    try {
-      const payload = {
-        goalType,
-        riskComfort,
-        horizonYears,
-        amount,
-        monthlyContribution,
-        currentVariant,
-        holdings: selectedHolding
-          ? [{ slug: selectedHolding.slug, amount, monthlyContribution, currentVariant }]
-          : []
-      };
-      const response = await fetch(`${API_BASE}/api/advice`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      setAdvice(await response.json());
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (selectedHolding) runCopilot();
-  }, [selectedHolding, goalType, currentVariant]);
-
-  async function sendMessage(message = chatInput) {
-    if (!message.trim()) return;
-    setChat((items) => [...items, { role: 'user', text: message }]);
-    setChatInput('');
-    const response = await fetch(`${API_BASE}/api/copilot/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, context: advice })
-    });
-    const data = await response.json();
-    setChat((items) => [...items, { role: 'assistant', text: data.response || data.message }]);
-  }
-
-  const exposureRows = useMemo(() => {
-    const exposure = selectedRecommendation?.fund.exposure || {};
-    return [
-      ['Equity', exposure.equity],
-      ['Debt', exposure.debt],
-      ['Cash', exposure.cash],
-      ['Large cap', exposure.largeCap],
-      ['Mid cap', exposure.midCap],
-      ['Small cap', exposure.smallCap]
-    ].filter(([, value]) => value !== undefined);
-  }, [selectedRecommendation]);
 
   return (
-    <main className="app-shell">
+    <div className="app-shell">
       <header className="topbar">
-        <div>
-          <span className="eyebrow">Indian mutual fund decision co-pilot</span>
-          <h1>SwitchWise AI</h1>
-        </div>
-        <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
-          {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
-        </button>
-      </header>
-
-      <section className="workspace">
-        <aside className="planner">
-          <div className="panel-title">
-            <Bot size={20} />
-            <div>
-              <h2>Investor brief</h2>
-              <p>Give the co-pilot enough context to make the decision useful.</p>
-            </div>
-          </div>
-
-          <div className="field">
-            <span>Primary goal</span>
-            <div className="segmented four">
-              {[
-                ['wealth', 'Wealth'],
-                ['retirement', 'Retire'],
-                ['balanced', 'Balanced'],
-                ['tax_review', 'Review']
-              ].map(([value, label]) => (
-                <button key={value} className={goalType === value ? 'active' : ''} onClick={() => setGoalType(value)}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="field">
-            <span>Current fund or AMC</span>
-            <label className="search-box">
-              <Search size={18} />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search HDFC Flexi, SBI Small..." />
-            </label>
-            <div className="fund-results">
-              {searchResults.map((fund) => (
-                <button
-                  key={fund.slug}
-                  className={selectedHolding?.slug === fund.slug ? 'fund-result active' : 'fund-result'}
-                  onClick={() => setSelectedHolding(fund)}
-                >
-                  <strong>{fund.displayName}</strong>
-                  <span>{fund.category} · NAV {fund.variants?.[0]?.nav ? `₹${fund.variants[0].nav.toFixed(2)}` : 'pending'}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="field">
-            <span>Plan you currently hold</span>
-            <div className="segmented">
-              <button className={currentVariant === 'regular' ? 'active' : ''} onClick={() => setCurrentVariant('regular')}>Regular</button>
-              <button className={currentVariant === 'direct' ? 'active' : ''} onClick={() => setCurrentVariant('direct')}>Direct</button>
-            </div>
-          </div>
-
-          <NumberField label="Current value" value={amount} onChange={setAmount} prefix="₹" step={10000} />
-          <NumberField label="Monthly investment" value={monthlyContribution} onChange={setMonthlyContribution} prefix="₹" step={1000} />
-          <NumberField label="Horizon" value={horizonYears} onChange={setHorizonYears} suffix="years" step={1} min={1} />
-
-          <div className="field">
-            <span>Risk comfort: {riskComfort}/5</span>
-            <input type="range" min="1" max="5" value={riskComfort} onChange={(event) => setRiskComfort(Number(event.target.value))} />
-          </div>
-
-          <button className="primary-button" onClick={runCopilot} disabled={loading}>
-            <Sparkles size={18} />
-            {loading ? 'Thinking through it' : 'Ask co-pilot for advice'}
+        <button className="brand" onClick={() => navigate('/')}>SwitchWise AI</button>
+        <div className="top-actions">
+          <span><ShieldCheck size={16} /> Deterministic analysis</span>
+          <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
           </button>
-        </aside>
-
-        <section className="decision-area">
-          <div className="hero-decision">
-            <div>
-              <span className="eyebrow">Next best action</span>
-              <h2>{advice?.summary?.headline || 'Select a fund to get a decision'}</h2>
-              <p>{advice?.summary?.nextAction?.reason || 'The co-pilot will compare your existing plan, suggest suitable Direct-plan alternatives and show the checks before acting.'}</p>
-            </div>
-            <div className="trust-badge">
-              <ShieldCheck size={18} />
-              {health?.mongo === 'connected' ? 'Mongo connected' : 'AMFI + prototype metadata'}
-            </div>
-          </div>
-
-          <div className="answer-grid">
-            <InsightCard icon={<IndianRupee />} label="Modeled switch benefit" value={advice?.summary?.totalSavingsLabel || '₹0'} helper="Before tax and exit load" />
-            <InsightCard icon={<CheckCircle2 />} label="Confidence" value={`${selectedRecommendation?.score.confidence || 0}%`} helper="Based on same-scheme switch certainty" />
-            <InsightCard icon={<TrendingUp />} label="Best new fund fit" value={candidates[0]?.fitScore ? `${candidates[0].fitScore}/100` : 'N/A'} helper={candidates[0]?.displayName || 'Run co-pilot'} />
-          </div>
-
-          <section className="section-block">
-            <div className="section-heading">
-              <h3>Recommended new funds</h3>
-              <p>Ranked for your goal, horizon, risk comfort and Direct-plan cost.</p>
-            </div>
-            <div className="fund-cards">
-              {candidates.map((fund) => (
-                <article className="fund-card" key={fund.slug}>
-                  <div>
-                    <strong>{fund.displayName}</strong>
-                    <span>{fund.category} · {fund.riskLabel}</span>
-                  </div>
-                  <b>{fund.fitScore}/100</b>
-                  <ul>
-                    {fund.why.map((item) => <li key={item}>{item}</li>)}
-                  </ul>
-                  <p>{fund.caution}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <section className="two-column">
-            <VariantPanel recommendation={selectedRecommendation} />
-            <ExposurePanel rows={exposureRows} sectors={selectedRecommendation?.fund.exposure.sectors || []} />
-          </section>
-
-          <section className="section-block risk-strip">
-            <AlertTriangle size={20} />
-            <div>
-              <h3>Checks before the user acts</h3>
-              {(advice?.assumptions || []).map((item) => <p key={item}>{item}</p>)}
-            </div>
-          </section>
-        </section>
-
-        <aside className="chat-panel">
-          <div className="panel-title">
-            <Bot size={20} />
-            <div>
-              <h2>Talk to co-pilot</h2>
-              <p>Ask why, what to buy next, tax impact, or risk.</p>
-            </div>
-          </div>
-          <div className="prompt-row">
-            {['Why this recommendation?', 'Suggest new funds', 'What about tax?', 'What is the risk?'].map((prompt) => (
-              <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>
-            ))}
-          </div>
-          <div className="messages">
-            {chat.map((item, index) => (
-              <div key={`${item.role}-${index}`} className={`bubble ${item.role}`}>{item.text}</div>
-            ))}
-          </div>
-          <form className="chat-input" onSubmit={(event) => { event.preventDefault(); sendMessage(); }}>
-            <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask a follow-up..." />
-            <button title="Send"><Send size={18} /></button>
-          </form>
-        </aside>
-      </section>
-    </main>
-  );
-}
-
-function InsightCard({ icon, label, value, helper }) {
-  return (
-    <article className="insight-card">
-      {icon}
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{helper}</small>
-    </article>
-  );
-}
-
-function NumberField({ label, value, onChange, prefix = '', suffix = '', step = 1, min = 0 }) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <div className="number-input">
-        {prefix && <small>{prefix}</small>}
-        <input type="number" min={min} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
-        {suffix && <small>{suffix}</small>}
-      </div>
-    </label>
-  );
-}
-
-function VariantPanel({ recommendation }) {
-  const direct = recommendation?.variants.direct;
-  const regular = recommendation?.variants.regular;
-  return (
-    <article className="section-block">
-      <div className="section-heading">
-        <h3>Regular vs Direct diagnosis</h3>
-        <p>{recommendation?.fund.displayName || 'Select a holding to compare variants.'}</p>
-      </div>
-      {[regular, direct].filter(Boolean).map((variant) => (
-        <div className={recommendation?.variants.recommended.variant === variant.variant ? 'variant-line selected' : 'variant-line'} key={variant.variant}>
-          <div>
-            <strong>{variant.variant === 'direct' ? 'Direct plan' : 'Regular plan'}</strong>
-            <span>{variant.source}</span>
-          </div>
-          <b>{variant.expenseRatio.toFixed(2)}%</b>
-          <small>NAV {variant.nav ? `₹${variant.nav.toFixed(2)}` : 'N/A'}</small>
         </div>
-      ))}
-      <div className="check-list">
-        {(recommendation?.checks || []).map((check) => <p key={check}><ArrowRight size={15} />{check}</p>)}
-      </div>
-    </article>
+      </header>
+      <main className="route-transition" key={path}>
+        <Router path={path} />
+      </main>
+    </div>
   );
 }
 
-function ExposurePanel({ rows, sectors }) {
+function Router({ path }) {
+  const { results } = useAppState();
+  if (path === '/') return <LandingPage />;
+  if (path === '/input') return <PortfolioInput />;
+  if (path === '/processing') return <ProcessingScreen />;
+  if (path === '/results') return results ? <ResultsDashboard /> : <PortfolioInput />;
+  if (path.startsWith('/fund/')) return results ? <FundDetail /> : <PortfolioInput />;
+  return <LandingPage />;
+}
+
+function LandingPage() {
+  const [showHow, setShowHow] = useState(false);
   return (
-    <article className="section-block">
-      <div className="section-heading">
-        <h3>Exposure view</h3>
-        <p>Direct vs Regular keeps the same scheme exposure.</p>
+    <section className="landing-screen">
+      <div className="hero-copy">
+        <span className="eyebrow">Mutual fund variant analysis</span>
+        <h1>SwitchWise AI</h1>
+        <p>Detect hidden losses in your mutual funds</p>
+        <div className="hero-actions">
+          <Button onClick={() => navigate('/input')}>Analyze My Portfolio <ArrowRight size={18} /></Button>
+          <Button variant="ghost" onClick={() => setShowHow(!showHow)}><HelpCircle size={18} /> How it works</Button>
+        </div>
       </div>
-      <div className="bars">
-        {rows.map(([label, value]) => (
-          <div className="bar-row" key={label}>
-            <span>{label}</span>
-            <div><i style={{ width: `${Math.min(100, Number(value || 0))}%` }} /></div>
-            <b>{Number(value || 0).toFixed(1)}%</b>
-          </div>
+      <Card className="hero-card">
+        <span>You may be paying extra every year</span>
+        <strong>Regular vs Direct</strong>
+        <p>Enter holdings, see potential loss, review what to switch, and understand why before acting.</p>
+      </Card>
+      {showHow && (
+        <Card className="how-card">
+          <h2>How it works</h2>
+          <p>We detect likely plan type, apply static expense-ratio data, compound both scenarios, and explain the decision in plain language.</p>
+        </Card>
+      )}
+    </section>
+  );
+}
+
+function PortfolioInput() {
+  const { portfolio, setPortfolio } = useAppState();
+  const [errors, setErrors] = useState([]);
+
+  function updateRow(index, row) {
+    setPortfolio(portfolio.map((item, itemIndex) => (itemIndex === index ? row : item)));
+  }
+
+  function removeRow(index) {
+    setPortfolio(portfolio.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function validate() {
+    const nextErrors = portfolio.map((row) => ({
+      fundName: row.fundName.trim() ? '' : 'Fund name is required',
+      amount: Number(row.amount) > 0 ? '' : 'Amount must be positive'
+    }));
+    setErrors(nextErrors);
+    return nextErrors.every((row) => !row.fundName && !row.amount);
+  }
+
+  function submit() {
+    if (!validate()) return;
+    navigate('/processing');
+  }
+
+  return (
+    <section className="flow-screen narrow">
+      <div className="screen-heading">
+        <span className="eyebrow">Step 1</span>
+        <h1>Add your holdings</h1>
+        <p>Add one or more mutual funds. Include "Regular" or "Direct" in the name if you know the plan.</p>
+      </div>
+      <Card className="input-card">
+        {portfolio.map((row, index) => (
+          <FundInputRow
+            key={index}
+            row={row}
+            index={index}
+            error={errors[index]}
+            canRemove={portfolio.length > 1}
+            onChange={updateRow}
+            onRemove={removeRow}
+          />
+        ))}
+        <AddRowButton onClick={() => setPortfolio([...portfolio, { fundName: '', amount: 100000, years: 10 }])} />
+      </Card>
+      <div className="single-cta">
+        <Button onClick={submit}>Analyze Portfolio <ArrowRight size={18} /></Button>
+      </div>
+    </section>
+  );
+}
+
+function ProcessingScreen() {
+  const { portfolio, setResults } = useAppState();
+  const [active, setActive] = useState(0);
+  const steps = ['Detecting fund variants', 'Calculating expense impact', 'Generating recommendations'];
+
+  useEffect(() => {
+    const timers = [
+      setTimeout(() => setActive(1), 450),
+      setTimeout(() => setActive(2), 900),
+      setTimeout(() => {
+        setResults(analyzePortfolio(portfolio));
+        navigate('/results');
+      }, 1500)
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [portfolio, setResults]);
+
+  return (
+    <section className="processing-screen">
+      <Card className="processing-card">
+        <span className="loader" />
+        <h1>Analyzing your portfolio</h1>
+        <div className="progress-list">
+          {steps.map((step, index) => (
+            <div key={step} className={index <= active ? 'complete' : ''}>
+              <i>{index + 1}</i>
+              <span>{step}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </section>
+  );
+}
+
+function ResultsDashboard() {
+  const { results, setSelectedFundId } = useAppState();
+  const [showDetails, setShowDetails] = useState(false);
+
+  function viewFund(fund) {
+    setSelectedFundId(fund.id);
+    navigate(`/fund/${fund.id}`);
+  }
+
+  return (
+    <section className="flow-screen">
+      <div className="screen-heading">
+        <span className="eyebrow">Step 3</span>
+        <h1>Your switching dashboard</h1>
+        <p>Fast decision first. Details are available for each fund.</p>
+      </div>
+      <SummaryCard results={results} onReview={() => setShowDetails(true)} />
+      <div className={showDetails ? 'fund-list visible' : 'fund-list'}>
+        {results.funds.map((fund) => (
+          <FundCard key={fund.id} fund={fund} onView={() => viewFund(fund)} />
         ))}
       </div>
-      <div className="chips">
-        {sectors.map((sector) => <span key={sector}>{sector}</span>)}
-      </div>
-    </article>
+    </section>
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+function FundDetail() {
+  const { results, selectedFund } = useAppState();
+  const pathId = decodeURIComponent(window.location.pathname.replace('/fund/', ''));
+  const fund = results?.funds.find((item) => item.id === pathId) || selectedFund;
+  if (!fund) return null;
+
+  return (
+    <section className="flow-screen">
+      <button className="back-link" onClick={() => navigate('/results')}><ArrowLeft size={16} /> Back to results</button>
+      <div className="detail-hero">
+        <div>
+          <span className="eyebrow">Fund detail</span>
+          <h1>{fund.fundName}</h1>
+          <p>You may lose {formatInr(fund.lifetimeLoss)} over {fund.years} years if you keep the current variant.</p>
+        </div>
+        <RecommendationBadge value={fund.recommendation} />
+      </div>
+      <div className="detail-grid">
+        <Card className="chart-card">
+          <h2>Growth Comparison</h2>
+          <GrowthChart fund={fund} />
+        </Card>
+        <BreakdownPanel fund={fund} />
+        <Card className="constraints">
+          <h2>Risk & Constraints</h2>
+          <p><strong>Exit load:</strong> {fund.exitLoad}</p>
+          <p><strong>Tax note:</strong> Switching may trigger capital gains tax. Verify holding period and gains before execution.</p>
+        </Card>
+        <Card className="ai-explanation">
+          <h2>AI Explanation</h2>
+          <p>{generateExplanation(fund)}</p>
+        </Card>
+      </div>
+      <div className="single-cta">
+        <Button>Simulate Switch <ArrowRight size={18} /></Button>
+      </div>
+    </section>
+  );
+}
+
+function Root() {
+  return (
+    <AppStateProvider>
+      <AppShell />
+    </AppStateProvider>
+  );
+}
+
+createRoot(document.getElementById('root')).render(<Root />);
