@@ -1,19 +1,37 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowLeft, ArrowRight, HelpCircle, Moon, ShieldCheck, Sun } from 'lucide-react';
-import { AppStateProvider, useAppState } from './state/AppState';
 import {
-  AddRowButton,
-  BreakdownPanel,
+  ArrowRight,
+  Bell,
+  ChartNoAxesCombined,
+  CircleUserRound,
+  Flame,
+  LayoutDashboard,
+  Moon,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+  WalletCards
+} from 'lucide-react';
+import { AppStateProvider, useAppState } from './state/AppState';
+import { fundDataset } from './data/fundDataset';
+import {
   Button,
   Card,
+  CopilotPanel,
+  FilterPill,
   FundCard,
-  FundInputRow,
-  GrowthChart,
+  GrowthComparisonChart,
+  InsightCard,
+  LineChart,
+  Metric,
+  PieChart,
+  PortfolioCard,
   RecommendationBadge,
   SummaryCard
 } from './components/ui';
-import { analyzePortfolio, formatInr, generateExplanation } from './utils/analysisEngine';
+import { analyzeHolding, findFundById, formatInr, formatPercent, getFundAlternatives } from './utils/analysisEngine';
 import './styles.css';
 
 function navigate(path) {
@@ -40,218 +58,417 @@ function useTheme() {
   return [theme, setTheme];
 }
 
+function routeName(path) {
+  if (path.startsWith('/portfolio')) return 'Portfolio';
+  if (path.startsWith('/explore')) return 'Explore';
+  if (path.startsWith('/fund/')) return 'Fund';
+  if (path.startsWith('/watchlist')) return 'Watchlist';
+  if (path.startsWith('/profile')) return 'Profile';
+  return 'Dashboard';
+}
+
 function AppShell() {
   const path = useRoute();
   const [theme, setTheme] = useTheme();
+  const loggedIn = path !== '/';
+  const { results, selectedFund } = useAppState();
+
+  if (!loggedIn) return <LandingPage theme={theme} setTheme={setTheme} />;
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <button className="brand" onClick={() => navigate('/')}>SwitchWise AI</button>
-        <div className="top-actions">
-          <span><ShieldCheck size={16} /> Deterministic analysis</span>
-          <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-          </button>
-        </div>
-      </header>
-      <main className="route-transition" key={path}>
+    <div className="app-frame">
+      <Navbar theme={theme} setTheme={setTheme} active={routeName(path)} />
+      <CopilotPanel page={routeName(path)} results={results} selectedFund={selectedFund} />
+      <main className="page-shell route-transition" key={path}>
         <Router path={path} />
       </main>
     </div>
   );
 }
 
+function Navbar({ theme, setTheme, active }) {
+  const { setSelectedFundId } = useAppState();
+  const [search, setSearch] = useState('');
+
+  function submit(event) {
+    event.preventDefault();
+    const query = search.toLowerCase();
+    const fund = fundDataset.find((item) => item.fundName.toLowerCase().includes(query) || item.category.toLowerCase().includes(query));
+    if (fund) {
+      setSelectedFundId(fund.id);
+      navigate(`/fund/${fund.id}`);
+      setSearch('');
+    }
+  }
+
+  const links = [
+    ['Dashboard', '/dashboard'],
+    ['Portfolio', '/portfolio'],
+    ['Explore', '/explore'],
+    ['Watchlist', '/watchlist'],
+    ['Profile', '/profile']
+  ];
+
+  return (
+    <header className="top-navbar">
+      <button className="brand" onClick={() => navigate('/dashboard')}>
+        <span>SW</span>
+        SwitchWise AI
+      </button>
+      <nav className="nav-links">
+        {links.map(([label, href]) => (
+          <button key={label} className={active === label ? 'active' : ''} onClick={() => navigate(href)}>
+            {label}
+          </button>
+        ))}
+      </nav>
+      <form className="global-search" onSubmit={submit}>
+        <Search size={17} />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search funds" />
+      </form>
+      <div className="nav-actions">
+        <button className="icon-button" title="Notifications"><Bell size={18} /></button>
+        <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
+          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+        </button>
+        <button className="profile-button" title="User menu"><CircleUserRound size={19} /> Aniket</button>
+      </div>
+    </header>
+  );
+}
+
 function Router({ path }) {
+  if (path === '/dashboard') return <DashboardPage />;
+  if (path === '/portfolio') return <PortfolioPage />;
+  if (path === '/explore') return <ExplorePage />;
+  if (path.startsWith('/fund/')) return <FundDetailPage path={path} />;
+  if (path === '/watchlist') return <WatchlistPage />;
+  if (path === '/profile') return <ProfilePage />;
+  return <DashboardPage />;
+}
+
+function LandingPage({ theme, setTheme }) {
+  return (
+    <main className="landing-page">
+      <header className="landing-nav">
+        <button className="brand" onClick={() => navigate('/')}>
+          <span>SW</span>
+          SwitchWise AI
+        </button>
+        <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
+          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+        </button>
+      </header>
+      <section className="landing-hero">
+        <div className="hero-panel">
+          <span className="eyebrow">Mutual fund intelligence</span>
+          <h1>You might be losing money in your mutual funds</h1>
+          <p>SwitchWise AI detects hidden expense drag, Regular plan leakage, and priority fixes without touching your transactions.</p>
+          <div className="hero-actions">
+            <Button onClick={() => navigate('/dashboard')}>Analyze My Portfolio <Sparkles size={18} /></Button>
+            <Button variant="ghost" onClick={() => navigate('/explore')}>Explore Funds</Button>
+          </div>
+        </div>
+        <Card className="loss-preview">
+          <Flame size={22} />
+          <span>Estimated hidden loss</span>
+          <strong>₹1.42L</strong>
+          <p>Detected across Regular plans in the sample portfolio.</p>
+        </Card>
+      </section>
+      <section className="steps-band">
+        {[
+          ['Add', 'Bring your holdings into one clean portfolio view.'],
+          ['Analyze', 'See costs, allocation, plan variants, and hidden loss.'],
+          ['Improve', 'Act on the highest-impact switches first.']
+        ].map(([title, copy]) => (
+          <Card key={title} className="step-card">
+            <span>{title}</span>
+            <p>{copy}</p>
+          </Card>
+        ))}
+      </section>
+      <div className="trust-note">
+        <ShieldCheck size={18} />
+        Uses public fund data and deterministic calculations. SwitchWise AI is a decision-support platform, not a trading platform.
+      </div>
+    </main>
+  );
+}
+
+function DashboardPage() {
   const { results } = useAppState();
-  if (path === '/') return <LandingPage />;
-  if (path === '/input') return <PortfolioInput />;
-  if (path === '/processing') return <ProcessingScreen />;
-  if (path === '/results') return results ? <ResultsDashboard /> : <PortfolioInput />;
-  if (path.startsWith('/fund/')) return results ? <FundDetail /> : <PortfolioInput />;
-  return <LandingPage />;
-}
-
-function LandingPage() {
-  const [showHow, setShowHow] = useState(false);
   return (
-    <section className="landing-screen">
-      <div className="hero-copy">
-        <span className="eyebrow">Mutual fund variant analysis</span>
-        <h1>SwitchWise AI</h1>
-        <p>Detect hidden losses in your mutual funds</p>
-        <div className="hero-actions">
-          <Button onClick={() => navigate('/input')}>Analyze My Portfolio <ArrowRight size={18} /></Button>
-          <Button variant="ghost" onClick={() => setShowHow(!showHow)}><HelpCircle size={18} /> How it works</Button>
-        </div>
+    <section className="stack">
+      <PageHeader eyebrow="Dashboard" title="Your portfolio situation, instantly" description="The biggest cost leaks, allocation picture, and next action are visible before you scroll." />
+      <div className="summary-grid">
+        <SummaryCard label="Total invested" value={formatInr(results.totalInvested)} detail="Principal across tracked funds" icon={WalletCards} />
+        <SummaryCard label="Current value" value={formatInr(results.currentValue)} detail={`${formatInr(results.totalReturns)} total returns`} tone="good" icon={ChartNoAxesCombined} />
+        <SummaryCard label="Estimated hidden loss" value={formatInr(results.totalLoss)} detail="Cost drag from plan variants" tone="danger" icon={Flame} />
+        <SummaryCard label="Funds needing action" value={results.actionCount} detail="Ranked by switching priority" tone="warn" icon={Sparkles} />
       </div>
-      <Card className="hero-card">
-        <span>You may be paying extra every year</span>
-        <strong>Regular vs Direct</strong>
-        <p>Enter holdings, see potential loss, review what to switch, and understand why before acting.</p>
-      </Card>
-      {showHow && (
-        <Card className="how-card">
-          <h2>How it works</h2>
-          <p>We detect likely plan type, apply static expense-ratio data, compound both scenarios, and explain the decision in plain language.</p>
+      <div className="dashboard-grid">
+        <Card className="panel insights-panel">
+          <SectionTitle title="Key Insights" action="Open Portfolio" onAction={() => navigate('/portfolio')} />
+          <div className="insight-list">
+            {results.insights.map((insight) => <InsightCard key={insight.id} insight={insight} onClick={() => navigate('/portfolio')} />)}
+          </div>
         </Card>
-      )}
-    </section>
-  );
-}
-
-function PortfolioInput() {
-  const { portfolio, setPortfolio } = useAppState();
-  const [errors, setErrors] = useState([]);
-
-  function updateRow(index, row) {
-    setPortfolio(portfolio.map((item, itemIndex) => (itemIndex === index ? row : item)));
-  }
-
-  function removeRow(index) {
-    setPortfolio(portfolio.filter((_, itemIndex) => itemIndex !== index));
-  }
-
-  function validate() {
-    const nextErrors = portfolio.map((row) => ({
-      fundName: row.fundName.trim() ? '' : 'Fund name is required',
-      amount: Number(row.amount) > 0 ? '' : 'Amount must be positive'
-    }));
-    setErrors(nextErrors);
-    return nextErrors.every((row) => !row.fundName && !row.amount);
-  }
-
-  function submit() {
-    if (!validate()) return;
-    navigate('/processing');
-  }
-
-  return (
-    <section className="flow-screen narrow">
-      <div className="screen-heading">
-        <span className="eyebrow">Step 1</span>
-        <h1>Add your holdings</h1>
-        <p>Add one or more mutual funds. Include "Regular" or "Direct" in the name if you know the plan.</p>
-      </div>
-      <Card className="input-card">
-        {portfolio.map((row, index) => (
-          <FundInputRow
-            key={index}
-            row={row}
-            index={index}
-            error={errors[index]}
-            canRemove={portfolio.length > 1}
-            onChange={updateRow}
-            onRemove={removeRow}
-          />
-        ))}
-        <AddRowButton onClick={() => setPortfolio([...portfolio, { fundName: '', amount: 100000, years: 10 }])} />
-      </Card>
-      <div className="single-cta">
-        <Button onClick={submit}>Analyze Portfolio <ArrowRight size={18} /></Button>
+        <Card className="panel">
+          <SectionTitle title="Allocation" />
+          <PieChart data={results.allocation} />
+        </Card>
+        <Card className="panel wide">
+          <SectionTitle title="Portfolio Growth" />
+          <LineChart points={results.performance} />
+        </Card>
+        <Card className="panel highlights-panel">
+          <SectionTitle title="Fund Highlights" />
+          <Highlight label="Best performer" fund={results.highlights.best} value={`${results.highlights.best.fiveYearReturn.toFixed(1)}%`} />
+          <Highlight label="Worst performer" fund={results.highlights.worst} value={`${results.highlights.worst.fiveYearReturn.toFixed(1)}%`} />
+          <Highlight label="Most expensive" fund={results.highlights.expensive} value={formatPercent(results.highlights.expensive.currentExpense)} />
+        </Card>
+        <Card className="panel action-center">
+          <span className="eyebrow">Action Center</span>
+          <h2>{results.actionCount} funds need switching</h2>
+          <p>Fix Regular plan drag before optimizing anything else. The highest hidden loss is already ranked on the portfolio page.</p>
+          <Button onClick={() => navigate('/portfolio')}>Review Priority Funds <ArrowRight size={16} /></Button>
+        </Card>
       </div>
     </section>
   );
 }
 
-function ProcessingScreen() {
-  const { portfolio, setResults } = useAppState();
-  const [active, setActive] = useState(0);
-  const steps = ['Detecting fund variants', 'Calculating expense impact', 'Generating recommendations'];
-
-  useEffect(() => {
-    const timers = [
-      setTimeout(() => setActive(1), 450),
-      setTimeout(() => setActive(2), 900),
-      setTimeout(() => {
-        setResults(analyzePortfolio(portfolio));
-        navigate('/results');
-      }, 1500)
-    ];
-    return () => timers.forEach(clearTimeout);
-  }, [portfolio, setResults]);
-
-  return (
-    <section className="processing-screen">
-      <Card className="processing-card">
-        <span className="loader" />
-        <h1>Analyzing your portfolio</h1>
-        <div className="progress-list">
-          {steps.map((step, index) => (
-            <div key={step} className={index <= active ? 'complete' : ''}>
-              <i>{index + 1}</i>
-              <span>{step}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
-    </section>
-  );
-}
-
-function ResultsDashboard() {
+function PortfolioPage() {
   const { results, setSelectedFundId } = useAppState();
-  const [showDetails, setShowDetails] = useState(false);
+  const [filter, setFilter] = useState('Needs action');
+  const sorted = [...results.funds].sort((a, b) => {
+    if (filter === 'High expense') return b.currentExpense - a.currentExpense;
+    if (filter === 'High loss') return b.lifetimeLoss - a.lifetimeLoss;
+    return Number(b.status === 'Needs Action') - Number(a.status === 'Needs Action') || b.lifetimeLoss - a.lifetimeLoss;
+  });
 
-  function viewFund(fund) {
-    setSelectedFundId(fund.id);
-    navigate(`/fund/${fund.id}`);
+  function openFund(fund) {
+    setSelectedFundId(fund.baseFundId);
+    navigate(`/fund/${fund.baseFundId}`);
   }
 
   return (
-    <section className="flow-screen">
-      <div className="screen-heading">
-        <span className="eyebrow">Step 3</span>
-        <h1>Your switching dashboard</h1>
-        <p>Fast decision first. Details are available for each fund.</p>
+    <section className="stack">
+      <PageHeader eyebrow="Portfolio" title="Manage and improve your funds" description="A decision-first view of every fund, ranked by hidden loss, plan cost, and required action." />
+      <Card className="bulk-banner">
+        <div>
+          <span className="eyebrow">Bulk Insight</span>
+          <h2>You are losing {formatInr(results.totalLoss)} across {results.regularCount} Regular funds</h2>
+        </div>
+        <div className="button-row">
+          <Button variant="secondary">Analyze All</Button>
+          <Button>Fix Priority Funds</Button>
+        </div>
+      </Card>
+      <div className="filter-row">
+        {['Needs action', 'High loss', 'High expense'].map((item) => (
+          <FilterPill key={item} active={filter === item} onClick={() => setFilter(item)}>{item}</FilterPill>
+        ))}
       </div>
-      <SummaryCard results={results} onReview={() => setShowDetails(true)} />
-      <div className={showDetails ? 'fund-list visible' : 'fund-list'}>
-        {results.funds.map((fund) => (
-          <FundCard key={fund.id} fund={fund} onView={() => viewFund(fund)} />
+      <div className="portfolio-list">
+        {sorted.map((fund) => <PortfolioCard key={fund.id} fund={fund} onView={() => openFund(fund)} />)}
+      </div>
+    </section>
+  );
+}
+
+function ExplorePage() {
+  const { watchlist, setWatchlist, setSelectedFundId } = useAppState();
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('All');
+  const [risk, setRisk] = useState('All');
+  const [expense, setExpense] = useState(1);
+  const funds = fundDataset.filter((fund) => {
+    const matchesQuery = fund.fundName.toLowerCase().includes(query.toLowerCase());
+    const matchesCategory = category === 'All' || fund.assetClass === category || fund.category === category;
+    const matchesRisk = risk === 'All' || fund.risk === risk;
+    return matchesQuery && matchesCategory && matchesRisk && fund.directExpense <= expense;
+  });
+
+  function openFund(id) {
+    setSelectedFundId(id);
+    navigate(`/fund/${id}`);
+  }
+
+  function toggleWatch(id) {
+    setWatchlist((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
+
+  return (
+    <section className="stack">
+      <PageHeader eyebrow="Explore" title="Discover funds intelligently" description="Search, filter, and compare funds using cost, category, risk, and portfolio fit." />
+      <Card className="explore-filters">
+        <label><span>Fund name</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by fund name" /></label>
+        <label><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option>All</option><option>Equity</option><option>Debt</option><option>Hybrid</option><option>Flexi Cap</option><option>Index Fund</option></select></label>
+        <label><span>Risk level</span><select value={risk} onChange={(event) => setRisk(event.target.value)}><option>All</option><option>Low</option><option>Moderate</option><option>High</option><option>Very High</option></select></label>
+        <label><span>Max expense {expense.toFixed(2)}%</span><input type="range" min="0.2" max="1.8" step="0.05" value={expense} onChange={(event) => setExpense(Number(event.target.value))} /></label>
+      </Card>
+      <div className="rail-grid">
+        <SuggestionRail title="Trending" funds={[...fundDataset].sort((a, b) => b.popularity - a.popularity).slice(0, 3)} onView={openFund} />
+        <SuggestionRail title="Low-cost funds" funds={[...fundDataset].sort((a, b) => a.directExpense - b.directExpense).slice(0, 3)} onView={openFund} />
+        <SuggestionRail title="Suggested for you" funds={fundDataset.filter((fund) => fund.directExpense < 0.75 && fund.risk !== 'Very High').slice(0, 3)} onView={openFund} />
+      </div>
+      <div className="fund-grid">
+        {funds.map((fund) => (
+          <FundCard key={fund.id} fund={fund} onView={() => openFund(fund.id)} watched={watchlist.includes(fund.id)} onToggleWatch={() => toggleWatch(fund.id)} />
         ))}
       </div>
     </section>
   );
 }
 
-function FundDetail() {
-  const { results, selectedFund } = useAppState();
-  const pathId = decodeURIComponent(window.location.pathname.replace('/fund/', ''));
-  const fund = results?.funds.find((item) => item.id === pathId) || selectedFund;
-  if (!fund) return null;
+function FundDetailPage({ path }) {
+  const { results, setSelectedFundId } = useAppState();
+  const id = decodeURIComponent(path.replace('/fund/', ''));
+  const fund = findFundById(id) || fundDataset[0];
+  const portfolioFund = results.funds.find((item) => item.baseFundId === id);
+  const analyzed = portfolioFund || analyzeHolding({ fundId: id, fundName: `${fund.fundName} Regular`, amount: 250000, currentValue: 286000, years: 8 });
+  const alternatives = getFundAlternatives(fund.id, 3);
+
+  useEffect(() => setSelectedFundId(id), [id, setSelectedFundId]);
 
   return (
-    <section className="flow-screen">
-      <button className="back-link" onClick={() => navigate('/results')}><ArrowLeft size={16} /> Back to results</button>
-      <div className="detail-hero">
-        <div>
-          <span className="eyebrow">Fund detail</span>
-          <h1>{fund.fundName}</h1>
-          <p>You may lose {formatInr(fund.lifetimeLoss)} over {fund.years} years if you keep the current variant.</p>
-        </div>
-        <RecommendationBadge value={fund.recommendation} />
-      </div>
-      <div className="detail-grid">
-        <Card className="chart-card">
-          <h2>Growth Comparison</h2>
-          <GrowthChart fund={fund} />
+    <section className="stack">
+      <PageHeader eyebrow="Fund Detail" title={fund.fundName} description={`${fund.category} · ${fund.assetClass} · ${fund.risk} risk`} />
+      <div className="fund-detail-grid">
+        <Card className="panel wide">
+          <SectionTitle title="Performance" />
+          <div className="return-strip">
+            <Metric label="1Y" value={`${fund.oneYearReturn.toFixed(1)}%`} />
+            <Metric label="3Y" value={`${fund.threeYearReturn.toFixed(1)}%`} />
+            <Metric label="5Y" value={`${fund.fiveYearReturn.toFixed(1)}%`} />
+          </div>
+          <GrowthComparisonChart fund={analyzed} />
         </Card>
-        <BreakdownPanel fund={fund} />
-        <Card className="constraints">
-          <h2>Risk & Constraints</h2>
-          <p><strong>Exit load:</strong> {fund.exitLoad}</p>
-          <p><strong>Tax note:</strong> Switching may trigger capital gains tax. Verify holding period and gains before execution.</p>
+        <Card className="panel">
+          <SectionTitle title="Cost" />
+          <Metric label="Direct expense" value={formatPercent(fund.directExpense)} />
+          <Metric label="Regular expense" value={formatPercent(fund.regularExpense)} />
+          <Metric label="Exit load" value={fund.exitLoad} />
         </Card>
-        <Card className="ai-explanation">
-          <h2>AI Explanation</h2>
-          <p>{generateExplanation(fund)}</p>
+        <Card className="panel">
+          <SectionTitle title="Variant Comparison" />
+          <div className="comparison-row"><span>Current variant</span><strong>{analyzed.currentPlan}</strong></div>
+          <div className="comparison-row"><span>Lower-cost variant</span><strong>Direct</strong></div>
+          <div className="comparison-row"><span>Estimated cost drag</span><strong>{formatInr(analyzed.lifetimeLoss)}</strong></div>
+          <RecommendationBadge value={analyzed.recommendation} />
         </Card>
-      </div>
-      <div className="single-cta">
-        <Button>Simulate Switch <ArrowRight size={18} /></Button>
+        <Card className="panel">
+          <SectionTitle title="Top Holdings" />
+          <div className="tag-list">{fund.holdings.map((item) => <span key={item}>{item}</span>)}</div>
+        </Card>
+        <Card className="panel">
+          <SectionTitle title="Sector Allocation" />
+          <PieChart data={fund.sectors} />
+        </Card>
+        <Card className="panel recommendation-panel">
+          <SectionTitle title="Recommendation" />
+          <h2>{portfolioFund ? 'Better than your current variant?' : 'Should you shortlist it?'}</h2>
+          <p>{portfolioFund ? `Direct plan can reduce long-term drag by ${formatInr(analyzed.lifetimeLoss)} before tax and exit-load effects.` : 'This fund is worth comparing if it improves cost without increasing your risk level.'}</p>
+          <div className="button-row">
+            {alternatives.map((item) => <Button key={item.id} variant="secondary" onClick={() => navigate(`/fund/${item.id}`)}>{item.fundName}</Button>)}
+          </div>
+        </Card>
       </div>
     </section>
+  );
+}
+
+function WatchlistPage() {
+  const { watchedFunds, setSelectedFundId } = useAppState();
+  return (
+    <section className="stack">
+      <PageHeader eyebrow="Watchlist" title="Saved funds and quick comparison" description="Keep promising alternatives ready for the moment a portfolio decision needs them." />
+      <Card className="panel comparison-table-card">
+        <table>
+          <thead>
+            <tr><th>Fund</th><th>Category</th><th>5Y return</th><th>Expense</th><th>Risk</th><th></th></tr>
+          </thead>
+          <tbody>
+            {watchedFunds.map((fund) => (
+              <tr key={fund.id}>
+                <td>{fund.fundName}</td>
+                <td>{fund.category}</td>
+                <td>{fund.fiveYearReturn.toFixed(1)}%</td>
+                <td>{formatPercent(fund.directExpense)}</td>
+                <td>{fund.risk}</td>
+                <td><Button variant="secondary" onClick={() => { setSelectedFundId(fund.id); navigate(`/fund/${fund.id}`); }}>Open</Button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+    </section>
+  );
+}
+
+function ProfilePage() {
+  const { results } = useAppState();
+  return (
+    <section className="stack">
+      <PageHeader eyebrow="Profile" title="Your SwitchWise settings" description="Theme preference is saved locally. Portfolio data in this prototype stays in the browser session." />
+      <div className="profile-grid">
+        <Card className="panel">
+          <SectionTitle title="Investor Profile" />
+          <Metric label="Primary goal" value="Lower avoidable costs" />
+          <Metric label="Risk comfort" value="Moderate to High" />
+          <Metric label="Tracked funds" value={results.funds.length} />
+        </Card>
+        <Card className="panel">
+          <SectionTitle title="Decision Rules" />
+          <p className="muted-copy">SwitchWise prioritizes Regular plan leakage, high expense ratios, and category concentration. It does not place trades or execute transactions.</p>
+        </Card>
+      </div>
+    </section>
+  );
+}
+
+function PageHeader({ eyebrow, title, description }) {
+  return (
+    <div className="page-header">
+      <span className="eyebrow">{eyebrow}</span>
+      <h1>{title}</h1>
+      <p>{description}</p>
+    </div>
+  );
+}
+
+function SectionTitle({ title, action, onAction }) {
+  return (
+    <div className="section-title">
+      <h2>{title}</h2>
+      {action ? <button onClick={onAction}>{action}</button> : null}
+    </div>
+  );
+}
+
+function Highlight({ label, fund, value }) {
+  return (
+    <div className="highlight-row">
+      <span>{label}</span>
+      <strong>{fund.fundName}</strong>
+      <em>{value}</em>
+    </div>
+  );
+}
+
+function SuggestionRail({ title, funds, onView }) {
+  return (
+    <Card className="suggestion-rail">
+      <SectionTitle title={title} />
+      {funds.map((fund) => (
+        <button key={fund.id} onClick={() => onView(fund.id)}>
+          <span>{fund.fundName}</span>
+          <strong>{formatPercent(fund.directExpense)}</strong>
+        </button>
+      ))}
+    </Card>
   );
 }
 

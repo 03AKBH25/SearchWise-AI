@@ -1,29 +1,38 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
+import { samplePortfolio } from '../data/fundDataset';
+import { analyzePortfolio, findFundById } from '../utils/analysisEngine';
 
 const AppStateContext = createContext(null);
 
-const defaultPortfolio = [
-  { fundName: 'HDFC Flexi Cap Fund Regular', amount: 300000, years: 10 }
-];
-
 export function AppStateProvider({ children }) {
-  const [portfolio, setPortfolio] = useState(defaultPortfolio);
-  const [results, setResults] = useState(null);
-  const [selectedFundId, setSelectedFundId] = useState(null);
+  const [portfolio, setPortfolio] = useState(samplePortfolio);
+  const [selectedFundId, setSelectedFundId] = useState('hdfc-flexi-cap');
+  const [watchlist, setWatchlist] = useState(['nippon-nifty-50', 'kotak-corporate-bond', 'mirae-asset-hybrid']);
 
-  const selectedFund = useMemo(
-    () => results?.funds.find((fund) => fund.id === selectedFundId) || results?.funds[0] || null,
+  const results = useMemo(() => analyzePortfolio(portfolio), [portfolio]);
+  const selectedHolding = useMemo(
+    () => results.funds.find((fund) => fund.baseFundId === selectedFundId || fund.id === selectedFundId) || null,
     [results, selectedFundId]
+  );
+  const selectedFund = useMemo(
+    () => selectedHolding || findFundById(selectedFundId) || results.funds[0] || null,
+    [results.funds, selectedFundId, selectedHolding]
+  );
+  const watchedFunds = useMemo(
+    () => watchlist.map((id) => findFundById(id)).filter(Boolean),
+    [watchlist]
   );
 
   const value = {
     portfolio,
     setPortfolio,
     results,
-    setResults,
     selectedFund,
     selectedFundId,
-    setSelectedFundId
+    setSelectedFundId,
+    watchlist,
+    setWatchlist,
+    watchedFunds
   };
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
