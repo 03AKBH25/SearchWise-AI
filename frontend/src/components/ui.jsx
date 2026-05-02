@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, Bot, Check, MessageSquare, Send, SlidersHorizontal, Star, X } from 'lucide-react';
+import { fundDataset } from '../data/fundDataset';
 import { formatInr, formatPercent, generateCopilotResponse } from '../utils/analysisEngine';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
 
 export function Button({ children, variant = 'primary', className = '', ...props }) {
   return (
@@ -175,6 +178,7 @@ export function PieChart({ data }) {
 export function CopilotPanel({ page, results, selectedFund }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
+  const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -183,21 +187,77 @@ export function CopilotPanel({ page, results, selectedFund }) {
   ]);
 
   useEffect(() => {
+    let ignore = false;
     setMessages([
       {
         role: 'assistant',
         content: generateCopilotResponse('page summary', { page, results, selectedFund })
       }
     ]);
+
+    askCopilot('Give me a concise page summary.', { silent: true }).then((answer) => {
+      if (!ignore && answer) {
+        setMessages([{ role: 'assistant', content: answer }]);
+      }
+    });
+
+    return () => {
+      ignore = true;
+    };
   }, [page, results, selectedFund]);
 
-  function submit(text = draft) {
+  function buildContext() {
+    return {
+      page,
+      results,
+      selectedFund,
+      fundUniverse: fundDataset
+    };
+  }
+
+  function normalizeAnswer(answer) {
+    if (!answer) return null;
+    if (typeof answer === 'string') {
+      return {
+        insight: answer,
+        evidence: 'This response came back as plain text from the advisor service.',
+        action: 'Use the app data shown on this page to verify the decision before acting.'
+      };
+    }
+    return {
+      insight: answer.insight || 'I need a little more context to answer this well.',
+      evidence: answer.evidence || 'No supporting evidence was returned.',
+      action: answer.action || 'Select a fund or add portfolio details, then ask again.'
+    };
+  }
+
+  async function askCopilot(query, options = {}) {
+    try {
+      if (!options.silent) setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/copilot/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: query, context: buildContext() })
+      });
+      if (!response.ok) throw new Error('Copilot request failed');
+      const data = await response.json();
+      return normalizeAnswer(data.response);
+    } catch (error) {
+      console.warn('Copilot API unavailable, using local fallback:', error);
+      return generateCopilotResponse(query, { page, results, selectedFund });
+    } finally {
+      if (!options.silent) setLoading(false);
+    }
+  }
+
+  async function submit(text = draft) {
     const query = text.trim();
     if (!query) return;
-    const response = generateCopilotResponse(query, { page, results, selectedFund });
-    setMessages((current) => [...current, { role: 'user', text: query }, { role: 'assistant', content: response }]);
+    setMessages((current) => [...current, { role: 'user', text: query }]);
     setDraft('');
     setOpen(true);
+    const response = await askCopilot(query);
+    setMessages((current) => [...current, { role: 'assistant', content: response }]);
   }
 
   const prompt = useMemo(() => {
@@ -212,7 +272,7 @@ export function CopilotPanel({ page, results, selectedFund }) {
       <form className="copilot-bar" onSubmit={(event) => { event.preventDefault(); submit(); }}>
         <Bot size={18} />
         <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={prompt} />
-        <button type="submit" title="Ask copilot"><Send size={17} /></button>
+        <button type="submit" title="Ask copilot" disabled={loading}><Send size={17} /></button>
       </form>
       <button className="floating-copilot" onClick={() => setOpen(true)} title="Open copilot">
         <MessageSquare size={22} />
@@ -239,6 +299,15 @@ export function CopilotPanel({ page, results, selectedFund }) {
               )}
             </div>
           ))}
+          {loading ? (
+            <div className="message assistant">
+              <div className="structured-answer">
+                <p><strong>Insight</strong>Checking the page data and fund evidence...</p>
+                <p><strong>Evidence</strong>Using your current portfolio, selected fund, and available fund universe.</p>
+                <p><strong>Action</strong>I will return a concise recommendation with the numbers that support it.</p>
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="quick-prompts">
           {['Where am I losing money?', 'What should I fix first?', 'Compare these funds'].map((item) => (

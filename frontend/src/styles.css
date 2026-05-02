@@ -933,6 +933,7 @@ th {
   gap: 3px;
   color: var(--muted);
   line-height: 1.45;
+  white-space: pre-line;
 }
 
 .structured-answer strong {
