@@ -6,6 +6,8 @@ const AppStateContext = createContext(null);
 
 export function AppStateProvider({ children }) {
   const [portfolio, setPortfolio] = useState(samplePortfolio);
+  const [guestPortfolio, setGuestPortfolio] = useState([]);
+  const [guestResults, setGuestResults] = useState(null);
   const [selectedFundId, setSelectedFundId] = useState('hdfc-flexi-cap');
   const [watchlist, setWatchlist] = useState(['nippon-nifty-50', 'kotak-corporate-bond', 'mirae-asset-hybrid']);
 
@@ -26,6 +28,10 @@ export function AppStateProvider({ children }) {
   const value = {
     portfolio,
     setPortfolio,
+    guestPortfolio,
+    setGuestPortfolio,
+    guestResults,
+    setGuestResults,
     results,
     selectedFund,
     selectedFundId,

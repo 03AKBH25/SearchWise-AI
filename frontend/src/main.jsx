@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowRight,
+  AlertCircle,
   BadgeIndianRupee,
   Bell,
+  Bot,
   ChartNoAxesCombined,
   CircleCheckBig,
   CircleUserRound,
@@ -15,19 +17,22 @@ import {
   LockKeyhole,
   MessageCircle,
   Moon,
+  Plus,
   RefreshCw,
   Scale,
   Search,
+  Send,
   ShieldCheck,
   Sparkles,
   Sun,
+  Trash2,
   TrendingDown,
   TrendingUp,
   UploadCloud,
   WalletCards
 } from 'lucide-react';
 import { AppStateProvider, useAppState } from './state/AppState';
-import { fundDataset } from './data/fundDataset';
+import { fundDataset, samplePortfolio } from './data/fundDataset';
 import {
   Button,
   Card,
@@ -43,7 +48,7 @@ import {
   RecommendationBadge,
   SummaryCard
 } from './components/ui';
-import { analyzeHolding, findFundById, formatInr, formatPercent, getFundAlternatives } from './utils/analysisEngine';
+import { analyzeHolding, analyzePortfolio, findFundById, formatInr, formatPercent, generateCopilotResponse, getFundAlternatives } from './utils/analysisEngine';
 import './styles.css';
 
 function navigate(path) {
@@ -71,6 +76,7 @@ function useTheme() {
 }
 
 function routeName(path) {
+  if (path.startsWith('/analysis-preview') || path.startsWith('/sample-analysis')) return 'Analysis';
   if (path.startsWith('/portfolio')) return 'Portfolio';
   if (path.startsWith('/explore')) return 'Explore';
   if (path.startsWith('/fund/')) return 'Fund';
@@ -82,11 +88,12 @@ function routeName(path) {
 function AppShell() {
   const path = useRoute();
   const [theme, setTheme] = useTheme();
-  const loggedIn = path !== '/';
+  const isGuestRoute = ['/portfolio-input', '/processing', '/analysis-preview', '/sample-analysis'].includes(path);
   const { results, selectedFund } = useAppState();
   const userName = 'Aniket';
 
-  if (!loggedIn) return <LandingPage theme={theme} setTheme={setTheme} />;
+  if (path === '/') return <LandingPage theme={theme} setTheme={setTheme} />;
+  if (isGuestRoute) return <GuestExperience path={path} theme={theme} setTheme={setTheme} />;
 
   return (
     <div className="app-frame">
@@ -256,7 +263,7 @@ function LandingPage({ theme, setTheme }) {
             {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
           </button>
           <Button variant="ghost" onClick={() => navigate('/dashboard')}>Sign In</Button>
-          <Button onClick={() => navigate('/dashboard')}>Get Started</Button>
+          <Button onClick={() => navigate('/portfolio-input')}>Get Started</Button>
         </div>
       </header>
 
@@ -266,8 +273,8 @@ function LandingPage({ theme, setTheme }) {
           <h1>You might be losing money in your mutual funds—without knowing it.</h1>
           <p>SwitchWise AI analyzes your portfolio, detects hidden costs, and tells you exactly what to fix.</p>
           <div className="hero-actions">
-            <Button className="btn-hero btn-hero-primary" onClick={() => navigate('/dashboard')}>Analyze My Portfolio <Sparkles size={18} /></Button>
-            <Button className="btn-hero btn-hero-secondary" variant="ghost" onClick={() => navigate('/explore')}>Try Sample Portfolio</Button>
+            <Button className="btn-hero btn-hero-primary" onClick={() => navigate('/portfolio-input')}>Analyze My Portfolio <Sparkles size={18} /></Button>
+            <Button className="btn-hero btn-hero-secondary" variant="ghost" onClick={() => navigate('/sample-analysis')}>Try Sample Portfolio</Button>
           </div>
           <div className="hero-assurance">
             <span><LockKeyhole size={15} /> No transactions</span>
@@ -349,7 +356,7 @@ function LandingPage({ theme, setTheme }) {
           <SectionIntro eyebrow="Explore" title="Compare funds before you act" description="Use sample fund cards to inspect category, expense ratio, and returns in one focused view." />
           <div className="button-row explore-actions">
             <Button onClick={() => navigate('/explore')}>Explore Funds <ArrowRight size={16} /></Button>
-            <Button variant="ghost" onClick={() => navigate('/dashboard')}>Try Sample Portfolio</Button>
+            <Button variant="ghost" onClick={() => navigate('/sample-analysis')}>Try Sample Portfolio</Button>
           </div>
         </div>
         <div className="landing-fund-grid">
@@ -438,6 +445,382 @@ function SectionIntro({ eyebrow, title, description }) {
       <span className="eyebrow">{eyebrow}</span>
       <h2>{title}</h2>
       <p>{description}</p>
+    </div>
+  );
+}
+
+function GuestExperience({ path, theme, setTheme }) {
+  return (
+    <div className="guest-frame">
+      <header className="guest-nav">
+        <button className="brand" onClick={() => navigate('/')}>
+          <span>SW</span>
+          SwitchWise AI
+        </button>
+        <div className="landing-nav-actions">
+          <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+          <Button variant="ghost" onClick={() => navigate('/')}>Back to Home</Button>
+        </div>
+      </header>
+      <main className="guest-shell route-transition" key={path}>
+        {path === '/portfolio-input' ? <PortfolioInputPage /> : null}
+        {path === '/processing' ? <ProcessingPage /> : null}
+        {path === '/analysis-preview' ? <AnalysisPreviewPage mode="guest" /> : null}
+        {path === '/sample-analysis' ? <AnalysisPreviewPage mode="sample" /> : null}
+      </main>
+    </div>
+  );
+}
+
+function PortfolioInputPage() {
+  const { setGuestPortfolio, setGuestResults } = useAppState();
+  const [rows, setRows] = useState([
+    { id: crypto.randomUUID(), fundId: 'hdfc-flexi-cap', fundName: 'HDFC Flexi Cap Fund', amount: 250000, years: 8, plan: 'Regular' },
+    { id: crypto.randomUUID(), fundId: 'parag-parikh-flexi-cap', fundName: 'Parag Parikh Flexi Cap Fund', amount: 180000, years: 5, plan: 'Direct' }
+  ]);
+  const [error, setError] = useState('');
+
+  function updateRow(id, field, value) {
+    setRows((current) => current.map((row) => row.id === id ? { ...row, [field]: value } : row));
+  }
+
+  function updateFundName(id, value) {
+    const matched = fundDataset.find((fund) => fund.fundName === value);
+    setRows((current) => current.map((row) => row.id === id ? { ...row, fundName: value, fundId: matched?.id || '' } : row));
+  }
+
+  function addRow() {
+    setRows((current) => [...current, { id: crypto.randomUUID(), fundId: '', fundName: '', amount: '', years: 5, plan: 'Regular' }]);
+  }
+
+  function removeRow(id) {
+    setRows((current) => current.length === 1 ? current : current.filter((row) => row.id !== id));
+  }
+
+  function buildPortfolio() {
+    return rows.map((row) => {
+      const fund = findFundById(row.fundId) || fundDataset[0];
+      const plan = row.plan || 'Regular';
+      return {
+        fundId: fund.id,
+        fundName: `${fund.fundName} ${plan}`,
+        amount: Number(row.amount),
+        currentValue: Number(row.amount),
+        years: Number(row.years || 5),
+        plan
+      };
+    });
+  }
+
+  function submit(event) {
+    event.preventDefault();
+    const invalid = rows.some((row) => !row.fundId || Number(row.amount) <= 0 || Number(row.years || 0) <= 0);
+    if (invalid) {
+      setError('Choose a fund from the search list, then add amount and years held for every row.');
+      return;
+    }
+    setError('');
+    setGuestPortfolio(buildPortfolio());
+    setGuestResults(null);
+    navigate('/processing');
+  }
+
+  return (
+    <section className="guest-stack">
+      <PageHeader eyebrow="Guest mode" title="Add Your Portfolio" description="Enter a few holdings to get a private preview. Nothing is saved until you create an account." />
+      <form className="portfolio-input-form" onSubmit={submit}>
+        <datalist id="fund-options">
+          {fundDataset.map((fund) => <option key={fund.id} value={fund.fundName} />)}
+        </datalist>
+        <div className="input-row-head">
+          <span>Fund</span>
+          <span>Plan</span>
+          <span>Amount invested</span>
+          <span>Years held</span>
+          <span />
+        </div>
+        {rows.map((row) => (
+          <Card className="holding-input-row" key={row.id}>
+            <label>
+              <span>Fund name</span>
+              <input list="fund-options" value={row.fundName} onChange={(event) => updateFundName(row.id, event.target.value)} placeholder="Search fund name" />
+            </label>
+            <label>
+              <span>Plan</span>
+              <select value={row.plan} onChange={(event) => updateRow(row.id, 'plan', event.target.value)}>
+                <option>Regular</option>
+                <option>Direct</option>
+              </select>
+            </label>
+            <label>
+              <span>Amount invested</span>
+              <input type="number" min="1" value={row.amount} onChange={(event) => updateRow(row.id, 'amount', event.target.value)} placeholder="250000" />
+            </label>
+            <label>
+              <span>Years held</span>
+              <input type="number" min="1" max="40" value={row.years} onChange={(event) => updateRow(row.id, 'years', event.target.value)} placeholder="5" />
+            </label>
+            <button type="button" className="icon-button remove-row" onClick={() => removeRow(row.id)} title="Remove fund">
+              <Trash2 size={17} />
+            </button>
+          </Card>
+        ))}
+        {error ? <p className="form-error"><AlertCircle size={16} />{error}</p> : null}
+        <div className="portfolio-form-actions">
+          <Button type="button" variant="secondary" onClick={addRow}><Plus size={17} /> Add Fund</Button>
+          <Button type="submit">Analyze Portfolio <ArrowRight size={17} /></Button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function ProcessingPage() {
+  const { guestPortfolio, setGuestResults } = useAppState();
+
+  useEffect(() => {
+    if (!guestPortfolio.length) {
+      navigate('/portfolio-input');
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      setGuestResults(analyzePortfolio(guestPortfolio));
+      navigate('/analysis-preview');
+    }, 1450);
+    return () => window.clearTimeout(timer);
+  }, [guestPortfolio, setGuestResults]);
+
+  return (
+    <section className="processing-page">
+      <div className="analysis-loader" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="processing-copy">
+        <span className="eyebrow">Analyzing portfolio</span>
+        <h1>Building your decision preview</h1>
+        <p>SwitchWise is checking fund variants, expense gaps, and priority actions.</p>
+      </div>
+      <Card className="processing-steps">
+        {['Detecting fund variants', 'Calculating hidden costs', 'Generating insights'].map((step, index) => (
+          <div key={step} className="processing-step">
+            <span>{index + 1}</span>
+            <strong>{step}</strong>
+          </div>
+        ))}
+      </Card>
+    </section>
+  );
+}
+
+function AnalysisPreviewPage({ mode }) {
+  const { guestResults, guestPortfolio, setGuestPortfolio, setGuestResults, setSelectedFundId } = useAppState();
+  const sampleResults = useMemo(() => analyzePortfolio(samplePortfolio), []);
+  const results = mode === 'sample' ? sampleResults : guestResults;
+  const portfolio = mode === 'sample' ? samplePortfolio : guestPortfolio;
+
+  useEffect(() => {
+    if (mode === 'sample') {
+      setGuestPortfolio(samplePortfolio);
+      setGuestResults(sampleResults);
+    } else if (!results) {
+      navigate('/portfolio-input');
+    }
+  }, [mode, results, sampleResults, setGuestPortfolio, setGuestResults]);
+
+  if (!results) return null;
+
+  const priorityFunds = [...results.funds]
+    .filter((fund) => fund.status !== 'Optimized')
+    .sort((a, b) => b.lifetimeLoss - a.lifetimeLoss)
+    .slice(0, 3);
+  const isGoodPortfolio = results.actionCount === 0 && results.totalLoss < Math.max(12000, results.totalInvested * 0.025);
+  const healthScore = Math.max(58, Math.min(96, Math.round(92 - (results.totalLoss / Math.max(1, results.totalInvested)) * 180 - results.actionCount * 7)));
+  const optimizedGain = results.optimizedGain || results.totalLoss;
+
+  function openFund(fund) {
+    setSelectedFundId(fund.baseFundId);
+    navigate(`/fund/${fund.baseFundId}`);
+  }
+
+  return (
+    <section className="guest-stack">
+      <div className="preview-header">
+        <PageHeader
+          eyebrow={mode === 'sample' ? 'Sample analysis' : 'Analysis preview'}
+          title={isGoodPortfolio ? 'Your portfolio is well optimized' : `You are losing ${formatInr(results.totalLoss)} due to high expense ratios`}
+          description="This is a guest preview. You can inspect the full analysis now, then create an account to save and keep improving it."
+        />
+        <Button onClick={() => navigate('/portfolio-input')} variant="secondary">Edit Inputs</Button>
+      </div>
+
+      <div className="summary-grid">
+        <SummaryCard label="Total invested" value={formatInr(results.totalInvested)} detail="Across entered holdings" icon={WalletCards} />
+        <SummaryCard label="Current value" value={formatInr(results.currentValue)} detail="Estimated from your inputs" tone="good" icon={ChartNoAxesCombined} />
+        <SummaryCard label="Hidden loss" value={formatInr(results.totalLoss)} detail="Potential expense drag over time" tone={results.totalLoss ? 'danger' : 'good'} icon={Flame} />
+        <SummaryCard label="Funds needing action" value={results.actionCount} detail="Ranked by priority" tone={results.actionCount ? 'warn' : 'good'} icon={Sparkles} />
+      </div>
+
+      <Card className={`health-card ${isGoodPortfolio ? 'good' : 'warn'}`}>
+        <div>
+          <span className="eyebrow">{isGoodPortfolio ? 'Good portfolio' : 'Issues detected'}</span>
+          <h2>{healthScore}/100 health score</h2>
+          <p>{isGoodPortfolio ? 'Your visible holdings are already cost-aware. Keep monitoring overlap, tax impact, and category concentration.' : 'The biggest decision is to review high-cost Regular variants before optimizing anything else.'}</p>
+        </div>
+        <div className="health-list">
+          {(isGoodPortfolio
+            ? ['Most holdings look cost-efficient', 'No urgent switches detected', 'Expense drag appears controlled']
+            : ['Regular plan leakage found', 'High expense gaps compound over time', 'Priority fixes are concentrated in a few funds']
+          ).map((item) => <span key={item}><CircleCheckBig size={15} />{item}</span>)}
+        </div>
+      </Card>
+
+      <div className="preview-grid">
+        <Card className="panel">
+          <SectionTitle title="Priority Fixes" />
+          <div className="priority-list">
+            {(priorityFunds.length ? priorityFunds : results.funds.slice(0, 3)).map((fund) => (
+              <button key={fund.id} className="priority-fund" onClick={() => openFund(fund)}>
+                <div>
+                  <strong>{fund.fundName}</strong>
+                  <span>{fund.category} · {fund.currentPlan}</span>
+                </div>
+                <div>
+                  <strong>{formatInr(fund.lifetimeLoss)}</strong>
+                  <RecommendationBadge value={fund.recommendation} />
+                </div>
+              </button>
+            ))}
+          </div>
+        </Card>
+        <Card className="panel projection-card">
+          <SectionTitle title="Future Projection" />
+          <h2>If optimized → {formatInr(optimizedGain)} gain over time</h2>
+          <p>Based on switching high-drag Regular variants to comparable Direct expense assumptions. Review tax and exit load before acting.</p>
+        </Card>
+      </div>
+
+      <GuestCopilot results={results} portfolio={portfolio} />
+
+      <div className="portfolio-list">
+        {results.funds.map((fund) => (
+          <Card key={fund.id} className="portfolio-card">
+            <div className="portfolio-main">
+              <div>
+                <h3>{fund.fundName}</h3>
+                <p>{fund.category} · {fund.assetClass}</p>
+              </div>
+              <RecommendationBadge value={fund.status} />
+            </div>
+            <div className="portfolio-metrics">
+              <Metric label="Amount" value={formatInr(fund.amount)} />
+              <Metric label="Plan" value={fund.currentPlan} />
+              <Metric label="Expense ratio" value={formatPercent(fund.currentExpense)} />
+              <Metric label="Lifetime loss" value={formatInr(fund.lifetimeLoss)} strong={fund.lifetimeLoss > 0} />
+            </div>
+            <div className="portfolio-actions">
+              <span>{fund.recommendation === 'Switch' ? 'Review this first' : fund.recommendation === 'Wait' ? 'Check exit load and tax impact' : 'Hold and monitor'}</span>
+              <Button variant="secondary" onClick={() => openFund(fund)}>Review & Fix <ArrowRight size={16} /></Button>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="conversion-card">
+        <div>
+          <span className="eyebrow">Keep improving</span>
+          <h2>Want to track and improve your portfolio over time?</h2>
+          <p>Create a free account to save this analysis, monitor changes, and unlock extended Copilot questions.</p>
+        </div>
+        <Button onClick={() => navigate('/dashboard')}>Create Free Account</Button>
+      </Card>
+    </section>
+  );
+}
+
+function GuestCopilot({ results, portfolio }) {
+  const [questionCount, setQuestionCount] = useState(0);
+  const [draft, setDraft] = useState('');
+  const [messages, setMessages] = useState([
+    {
+      role: 'assistant',
+      content: {
+        insight: 'I can answer up to 3 guest questions about this preview.',
+        evidence: `${results.funds.length} funds analyzed with ${formatInr(results.totalLoss)} estimated hidden loss.`,
+        action: 'Ask where money is leaking, what to fix first, or whether a fund should be held.'
+      }
+    }
+  ]);
+  const [showLimit, setShowLimit] = useState(false);
+  const limit = 3;
+
+  function submit(text = draft) {
+    const query = text.trim();
+    if (!query) return;
+    if (questionCount >= limit) {
+      setShowLimit(true);
+      return;
+    }
+    const response = generateCopilotResponse(query, { page: 'Portfolio', results, portfolio });
+    setMessages((current) => [...current, { role: 'user', text: query }, { role: 'assistant', content: response }]);
+    setDraft('');
+    setQuestionCount((count) => count + 1);
+  }
+
+  return (
+    <Card className="guest-copilot">
+      <div className="guest-copilot-head">
+        <div>
+          <span className="eyebrow">Copilot · Guest mode</span>
+          <h2>Ask anything about your portfolio</h2>
+        </div>
+        <span>{Math.max(0, limit - questionCount)} questions left</span>
+      </div>
+      <div className="guest-copilot-body">
+        <div className="guest-messages">
+          {messages.map((message, index) => (
+            <div key={index} className={`guest-message ${message.role}`}>
+              {message.role === 'user' ? <p>{message.text}</p> : <GuestCopilotAnswer content={message.content} />}
+            </div>
+          ))}
+        </div>
+        <div className="quick-prompts guest-quick-prompts">
+          {['Where am I losing money?', 'What should I fix first?', 'Which funds should I hold?'].map((item) => (
+            <button key={item} onClick={() => submit(item)}>{item}</button>
+          ))}
+        </div>
+        <form className="guest-copilot-compose" onSubmit={(event) => { event.preventDefault(); submit(); }}>
+          <Bot size={18} />
+          <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask about losses, risk, or priority fixes..." />
+          <button type="submit" title="Ask guest copilot"><Send size={17} /></button>
+        </form>
+      </div>
+      {showLimit ? (
+        <div className="modal-backdrop">
+          <Card className="upgrade-modal">
+            <span className="eyebrow">Guest limit reached</span>
+            <h2>Create an account to continue exploring your portfolio</h2>
+            <p>Saving your analysis unlocks extended Copilot, tracking, and deeper fund reviews.</p>
+            <div className="button-row">
+              <Button onClick={() => navigate('/dashboard')}>Create Free Account</Button>
+              <Button variant="ghost" onClick={() => setShowLimit(false)}>Keep Preview Open</Button>
+            </div>
+          </Card>
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+function GuestCopilotAnswer({ content }) {
+  return (
+    <div className="guest-answer">
+      <p><strong>Insight</strong>{content.insight || content.summary || 'Review the highest-loss fund first.'}</p>
+      <p><strong>Evidence</strong>{content.evidence || 'This is based on your entered portfolio and computed expense drag.'}</p>
+      <p><strong>Action</strong>{content.action || 'Open the priority fund and check plan, tax, and exit-load impact.'}</p>
     </div>
   );
 }
@@ -570,10 +953,11 @@ function ExplorePage() {
 }
 
 function FundDetailPage({ path }) {
-  const { results, setSelectedFundId } = useAppState();
+  const { results, guestResults, setSelectedFundId } = useAppState();
   const id = decodeURIComponent(path.replace('/fund/', ''));
   const fund = findFundById(id) || fundDataset[0];
-  const portfolioFund = results.funds.find((item) => item.baseFundId === id);
+  const activeResults = guestResults || results;
+  const portfolioFund = activeResults.funds.find((item) => item.baseFundId === id);
   const analyzed = portfolioFund || analyzeHolding({ fundId: id, fundName: `${fund.fundName} Regular`, amount: 250000, currentValue: 286000, years: 8 });
   const alternatives = getFundAlternatives(fund.id, 3);
 

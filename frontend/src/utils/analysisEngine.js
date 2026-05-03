@@ -63,15 +63,15 @@ export function futureValue(principal, expectedReturn, expense, years) {
 }
 
 function recommendationFor(loss, amount, plan, expenseDiff) {
-  if (plan === 'Direct') return 'Avoid';
+  if (plan === 'Direct') return 'Hold';
   if (loss > Math.max(18000, amount * 0.045) || expenseDiff >= 0.85) return 'Switch';
   if (loss > 3500) return 'Wait';
-  return 'Avoid';
+  return 'Hold';
 }
 
 function statusFor(recommendation) {
   if (recommendation === 'Switch') return 'Needs Action';
-  if (recommendation === 'Wait') return 'Review';
+  if (recommendation === 'Wait') return 'Wait';
   return 'Optimized';
 }
 
@@ -187,6 +187,7 @@ export function analyzePortfolio(portfolio) {
     totalLoss,
     actionCount,
     regularCount,
+    optimizedGain: funds.reduce((sum, fund) => sum + Math.max(0, fund.switchedFV - fund.currentFV), 0),
     allocation,
     performance,
     insights,
