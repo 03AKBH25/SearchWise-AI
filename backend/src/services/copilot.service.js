@@ -34,15 +34,25 @@ STRICT RULES:
 
 RESPONSE FORMAT (MANDATORY):
 {
-  "insight": "Primary diagnosis or explanation. If the user asks for a table or list, use Markdown formatting inside this string.",
-  "evidence": "3-5 short lines supporting the insight. Use concrete numbers from context.",
-  "action": "A prioritized decision plan with 2-4 numbered steps."
+  "type": "answer | analysis | comparison | decision | table",
+  "title": "Short natural title, not a generic label",
+  "summary": "One direct answer in plain language",
+  "blocks": [
+    { "type": "paragraph", "text": "Use for definitions and natural explanations." },
+    { "type": "bullets", "title": "Optional section title", "items": ["Concrete point", "Concrete point"] },
+    { "type": "steps", "title": "Optional section title", "items": ["First step", "Second step"] },
+    { "type": "table", "title": "Optional table title", "columns": ["Fund", "Expense", "Return"], "rows": [["Fund A", "0.18%", "14.7%"]] },
+    { "type": "callout", "tone": "info | warning | success", "text": "Important note." }
+  ]
 }
 
 CONTENT RULES:
 - For analyzing funds, use ONLY the data provided in context. 
 - If the user asks for a definition or general financial concept, use your expert knowledge.
-- If the user asks for a specific format (like a table), provide it using Markdown syntax within the "insight" field.
+- Choose the response shape that fits the question. Do not force insight/evidence/action.
+- If the user asks for a table or comparison, return a table block with real columns and rows.
+- If the user asks a simple concept question, answer with a summary and 1-3 explanatory blocks.
+- If the user asks for a portfolio decision, include evidence and steps.
 
 TONE:
 - Senior finance expert: calm, specific, numerate, and practical.
@@ -194,6 +204,16 @@ function isLowExpenseQuery(query) {
   );
 }
 
+function isNifty50Query(query) {
+  const text = normalize(query);
+  return text.includes('nifty 50') || text.includes('nifty50');
+}
+
+function isComparisonTableQuery(query) {
+  const text = normalize(query);
+  return text.includes('table') || text.includes('tabular') || text.includes('compare') || text.includes('comparison');
+}
+
 function usableReturn(value) {
   const number = Number(value || 0);
   if (!Number.isFinite(number)) return 0;
@@ -252,43 +272,87 @@ function lowExpenseShortlistResponse(userMessage = '', context = {}) {
   }
 
   return {
-    insight: [
-      'Low expense shortlist from the visible fund universe:',
-      ...top.map((fund, index) => {
-        const returnValue = fund.fiveYearReturn ?? fund.expectedReturn;
-        const returnLabel = fund.fiveYearReturn == null ? 'expected return' : '5Y return';
-        return `${index + 1}. ${fundDisplayName(fund)} - ${formatPercent(fund.directExpense)} Direct expense, ${formatPercent(returnValue)} ${returnLabel}, ${fund.risk || 'risk unavailable'} risk, ${fund.category || 'category unavailable'}.`;
-      }),
-      '',
-      bestReturnLowCost
-        ? `Best low-cost return trade-off: ${fundDisplayName(bestReturnLowCost)} has ${formatPercent(bestReturnLowCost.directExpense)} Direct expense with ${formatPercent(bestReturnLowCost.fiveYearReturn ?? bestReturnLowCost.expectedReturn)} ${bestReturnLowCost.fiveYearReturn == null ? 'expected return' : '5Y return'}.`
-        : 'Lowest expense alone is not enough; compare category and risk before choosing.'
-    ].join('\n'),
-    evidence: [
-      `Lowest visible expense: ${fundDisplayName(top[0])} at ${formatPercent(top[0].directExpense)} Direct expense.`,
-      balanced.length
-        ? `Balanced low-cost choices excluding Very High risk: ${balanced.map((fund) => `${fundDisplayName(fund)} (${formatPercent(fund.directExpense)}, ${fund.risk} risk)`).join('; ')}.`
-        : 'Most low-cost options here carry high or very high equity risk, so match them carefully to your horizon.',
-      ...top.slice(0, 3).map((fund) => {
-        const gap = Math.max(0, Number(fund.regularExpense || 0) - Number(fund.directExpense || 0));
-        return `${fundDisplayName(fund)}: Regular ${formatPercent(fund.regularExpense)} vs Direct ${formatPercent(fund.directExpense)}, annual plan-cost gap ${formatPercent(gap)}.`;
-      })
-    ].join('\n'),
-    action: [
-      `1. Core equity choice: shortlist ${fundDisplayName(coreEquity)} for low-cost broad-market exposure; verify benchmark fit before investing.`,
-      conservative
-        ? `2. Conservative choice: use ${fundDisplayName(conservative)} if capital stability matters more than equity-like return.`
-        : '2. If you cannot tolerate sharp drawdowns, filter out Very High risk funds before choosing.',
-      hybrid
-        ? `3. Balanced choice: compare ${fundDisplayName(hybrid)} if you want equity participation with some debt allocation.`
-        : bestReturnLowCost
-          ? `3. If return potential matters after cost, compare ${fundDisplayName(bestReturnLowCost)} against the cheapest option, not just on expense.`
-          : '3. Ask for a category-specific shortlist, e.g. low expense debt funds or low expense flexi-cap funds.',
-      bestReturnLowCost
-        ? `4. Aggressive return choice: consider ${fundDisplayName(bestReturnLowCost)} only if you can accept ${bestReturnLowCost.risk || 'higher'} risk and category concentration.`
-        : '4. Ask for a category-specific shortlist, e.g. low expense debt funds or low expense flexi-cap funds.',
-      '5. Before switching existing holdings, check exit load, capital-gains tax, and overlap with funds you already own.'
-    ].join('\n')
+    type: isComparisonTableQuery(userMessage) ? 'table' : 'comparison',
+    title: 'Low-Expense Fund Shortlist',
+    summary: `${fundDisplayName(top[0])} has the lowest visible Direct expense ratio at ${formatPercent(top[0].directExpense)}, but the right choice depends on whether you want equity growth, debt stability, or a balanced fund.`,
+    blocks: [
+      {
+        type: 'table',
+        title: 'Ranked by Direct expense ratio',
+        columns: ['Rank', 'Fund', 'Direct expense', '5Y/expected return', 'Risk', 'Category', 'Plan gap'],
+        rows: top.map((fund, index) => {
+          const returnValue = fund.fiveYearReturn ?? fund.expectedReturn;
+          const gap = Math.max(0, Number(fund.regularExpense || 0) - Number(fund.directExpense || 0));
+          return [
+            String(index + 1),
+            fundDisplayName(fund),
+            formatPercent(fund.directExpense),
+            formatPercent(returnValue),
+            fund.risk || 'Not available',
+            fund.category || 'Not available',
+            formatPercent(gap)
+          ];
+        })
+      },
+      {
+        type: 'bullets',
+        title: 'How to read this',
+        items: [
+          `Lowest visible expense: ${fundDisplayName(top[0])} at ${formatPercent(top[0].directExpense)} Direct expense.`,
+          balanced.length
+            ? `Lower-volatility shortlist: ${balanced.map((fund) => `${fundDisplayName(fund)} (${formatPercent(fund.directExpense)}, ${fund.risk} risk)`).join('; ')}.`
+            : 'Most low-cost options here carry high or very high equity risk, so match them carefully to your horizon.',
+          bestReturnLowCost
+            ? `Best low-cost return trade-off: ${fundDisplayName(bestReturnLowCost)} has ${formatPercent(bestReturnLowCost.directExpense)} Direct expense with ${formatPercent(bestReturnLowCost.fiveYearReturn ?? bestReturnLowCost.expectedReturn)} ${bestReturnLowCost.fiveYearReturn == null ? 'expected return' : '5Y return'}.`
+            : 'Lowest expense alone is not enough; compare category and risk before choosing.'
+        ]
+      },
+      {
+        type: 'steps',
+        title: 'Decision path',
+        items: [
+          `Core equity: shortlist ${fundDisplayName(coreEquity)} for low-cost broad-market exposure; verify benchmark fit before investing.`,
+          conservative
+            ? `Conservative: use ${fundDisplayName(conservative)} if capital stability matters more than equity-like return.`
+            : 'If you cannot tolerate sharp drawdowns, filter out Very High risk funds before choosing.',
+          hybrid
+            ? `Balanced: compare ${fundDisplayName(hybrid)} if you want equity participation with some debt allocation.`
+            : 'Ask for a category-specific shortlist, e.g. low expense debt funds or low expense flexi-cap funds.',
+          bestReturnLowCost
+            ? `Aggressive return: consider ${fundDisplayName(bestReturnLowCost)} only if you can accept ${bestReturnLowCost.risk || 'higher'} risk and category concentration.`
+            : 'Use return only after you have matched risk and category.',
+          'Before switching existing holdings, check exit load, capital-gains tax, and overlap with funds you already own.'
+        ]
+      }
+    ]
+  };
+}
+
+function nifty50Response() {
+  return {
+    type: 'answer',
+    title: 'Nifty 50 Explained',
+    summary: "The Nifty 50 is a benchmark index that tracks 50 of India's largest and most liquid listed companies.",
+    blocks: [
+      {
+        type: 'paragraph',
+        text: 'Think of it as a quick health check for large Indian companies. When people say "the market is up" in India, they often mean indices like the Nifty 50 or Sensex moved up.'
+      },
+      {
+        type: 'bullets',
+        title: 'What it represents',
+        items: [
+          'It includes 50 large companies across sectors such as banks, IT, energy, consumer goods, autos, and healthcare.',
+          'It is market-cap weighted, so larger companies influence the index more than smaller ones.',
+          'Mutual funds and ETFs use it as a benchmark for large-cap Indian equity performance.'
+        ]
+      },
+      {
+        type: 'callout',
+        tone: 'info',
+        text: 'For investors, a Nifty 50 index fund is usually a low-cost way to get broad large-cap equity exposure, but it still carries equity-market risk.'
+      }
+    ]
   };
 }
 
@@ -337,6 +401,90 @@ function cleanField(value) {
   return String(value || '').trim();
 }
 
+function linesFrom(value) {
+  return cleanField(value)
+    .split('\n')
+    .map((line) => line.replace(/^[•\-\d.\s]+/, '').trim())
+    .filter(Boolean);
+}
+
+function normalizeTableBlock(block = {}) {
+  const columns = Array.isArray(block.columns) ? block.columns.map(String) : [];
+  const rows = Array.isArray(block.rows)
+    ? block.rows
+        .filter((row) => Array.isArray(row) || row && typeof row === 'object')
+        .map((row) => {
+          if (Array.isArray(row)) return row.map((cell) => String(cell ?? ''));
+          return columns.map((column) => String(row[column] ?? row[column.toLowerCase()] ?? ''));
+        })
+    : [];
+
+  return columns.length && rows.length
+    ? { type: 'table', title: block.title ? String(block.title) : '', columns, rows }
+    : null;
+}
+
+function normalizeBlock(block) {
+  if (!block) return null;
+  if (typeof block === 'string') return { type: 'paragraph', text: block };
+  if (typeof block !== 'object') return null;
+
+  if (block.type === 'table') return normalizeTableBlock(block);
+  if (block.type === 'bullets' || block.type === 'steps') {
+    const items = Array.isArray(block.items) ? block.items.map(String).filter(Boolean) : linesFrom(block.text);
+    return items.length ? { type: block.type, title: block.title ? String(block.title) : '', items } : null;
+  }
+  if (block.type === 'callout') {
+    const text = cleanField(block.text);
+    return text ? { type: 'callout', tone: block.tone || 'info', text } : null;
+  }
+
+  const text = cleanField(block.text || block.content || block.paragraph);
+  return text ? { type: 'paragraph', text } : null;
+}
+
+function legacyToBlocks(answer = {}) {
+  const blocks = [];
+  if (answer.insight) blocks.push({ type: 'paragraph', text: cleanField(answer.insight) });
+  if (answer.evidence) blocks.push({ type: 'bullets', title: 'Evidence', items: linesFrom(answer.evidence) });
+  if (answer.action) blocks.push({ type: 'steps', title: 'Suggested next steps', items: linesFrom(answer.action) });
+  return blocks;
+}
+
+function normalizeCopilotResponse(answer, fallbackTitle = 'SwitchWise Copilot') {
+  if (!answer) {
+    return {
+      type: 'answer',
+      title: fallbackTitle,
+      summary: 'I need a little more context to answer that well.',
+      blocks: [{ type: 'paragraph', text: 'Try asking about a fund, expense ratio, portfolio risk, or a comparison you want to make.' }]
+    };
+  }
+
+  if (typeof answer === 'string') {
+    const nested = extractJsonObject(answer);
+    if (nested) return normalizeCopilotResponse(nested, fallbackTitle);
+    return {
+      type: 'answer',
+      title: fallbackTitle,
+      summary: answer.trim(),
+      blocks: [{ type: 'paragraph', text: answer.trim() }]
+    };
+  }
+
+  const blocks = Array.isArray(answer.blocks)
+    ? answer.blocks.map(normalizeBlock).filter(Boolean)
+    : legacyToBlocks(answer).map(normalizeBlock).filter(Boolean);
+  const summary = cleanField(answer.summary || answer.insight || blocks[0]?.text || '');
+
+  return {
+    type: answer.type || (answer.insight || answer.evidence || answer.action ? 'analysis' : 'answer'),
+    title: answer.title || fallbackTitle,
+    summary,
+    blocks: blocks.length ? blocks : [{ type: 'paragraph', text: summary || 'No response content was returned.' }]
+  };
+}
+
 function extractJsonObject(text) {
   const raw = String(text || '').trim();
   try {
@@ -383,11 +531,7 @@ function parseJsonResponse(text, userMessage, context) {
     let parsed = extractJsonObject(text);
     if (!parsed) {
       if (text && text.trim().length > 10) {
-        return {
-          insight: text.replace(/```json/gi, '').replace(/```/g, '').trim(),
-          evidence: "",
-          action: ""
-        };
+        return normalizeCopilotResponse(text.replace(/```json/gi, '').replace(/```/g, '').trim());
       }
       throw new Error('No JSON found');
     }
@@ -397,18 +541,14 @@ function parseJsonResponse(text, userMessage, context) {
       if (typeof parsed[field] === 'string' && parsed[field].trim().startsWith('{')) {
         const nested = extractJsonObject(parsed[field]);
         if (nested?.insight || nested?.evidence || nested?.action) parsed = { ...parsed, ...nested };
-        else return fallbackResponse(userMessage, context);
+        else return normalizeCopilotResponse(fallbackResponse(userMessage, context));
       }
     }
 
-    return {
-      insight: cleanField(parsed.insight),
-      evidence: cleanField(parsed.evidence),
-      action: cleanField(parsed.action)
-    };
+    return normalizeCopilotResponse(parsed);
   } catch (err) {
     console.warn('Failed to parse AI response as JSON:', err.message);
-    return fallbackResponse(userMessage, context);
+    return normalizeCopilotResponse(fallbackResponse(userMessage, context));
   }
 }
 
@@ -423,6 +563,7 @@ function fallbackResponse(userMessage = '', context = {}) {
     .filter((fund) => fund.currentPlan === 'Regular' || fund.status === 'Needs Action')
     .sort((a, b) => Number(b.lifetimeLoss || 0) - Number(a.lifetimeLoss || 0));
 
+  if (isNifty50Query(userMessage)) return nifty50Response();
   if (isLowExpenseQuery(userMessage)) return lowExpenseShortlistResponse(userMessage, context);
 
   if (q.includes('summarize') || q.includes('summary') || q.includes('overview')) {
@@ -583,13 +724,19 @@ export async function getCopilotResponse(userMessage = '', context = {}) {
     query.includes('summary') ||
     query.includes('overview');
   const shouldUseDeterministicLowExpenseAnswer = isLowExpenseQuery(userMessage);
+  const shouldUseDeterministicConceptAnswer = isNifty50Query(userMessage);
 
-  if (shouldUseDeterministicLossAnswer || shouldUseDeterministicContextAnswer || shouldUseDeterministicLowExpenseAnswer) {
-    return fallbackResponse(userMessage, context);
+  if (
+    shouldUseDeterministicLossAnswer ||
+    shouldUseDeterministicContextAnswer ||
+    shouldUseDeterministicLowExpenseAnswer ||
+    shouldUseDeterministicConceptAnswer
+  ) {
+    return normalizeCopilotResponse(fallbackResponse(userMessage, context));
   }
 
   const model = getGeminiModel();
-  if (!model) return fallbackResponse(userMessage, context);
+  if (!model) return normalizeCopilotResponse(fallbackResponse(userMessage, context));
 
   const prompt = [
     `User question: ${userMessage || 'Give a contextual summary.'}`,
@@ -614,12 +761,16 @@ export async function getCopilotResponse(userMessage = '', context = {}) {
     
     if (error?.status === 429 || error?.message?.includes('429')) {
       return {
-        insight: "SwitchWise Copilot is currently at maximum capacity for the free tier.",
-        evidence: "You have reached the temporary usage limit of the Gemini API free quota.",
-        action: "1. Please wait a moment before trying again.\n2. Consider upgrading to SwitchWise Premium for unlimited, high-priority Copilot access."
+        type: 'answer',
+        title: 'Copilot Capacity Reached',
+        summary: 'SwitchWise Copilot is currently at maximum capacity for the free tier.',
+        blocks: [
+          { type: 'paragraph', text: 'You have reached the temporary usage limit of the Gemini API free quota.' },
+          { type: 'steps', title: 'What to do next', items: ['Please wait a moment before trying again.', 'Consider upgrading to SwitchWise Premium for unlimited, high-priority Copilot access.'] }
+        ]
       };
     }
     
-    return fallbackResponse(userMessage, context);
+    return normalizeCopilotResponse(fallbackResponse(userMessage, context));
   }
 }

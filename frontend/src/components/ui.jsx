@@ -181,6 +181,104 @@ function getTimeBasedGreeting(name = 'there') {
   return `Good ${period}, ${name}`;
 }
 
+function extractJsonObject(text) {
+  const raw = String(text || '').trim();
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start === -1 || end <= start) return null;
+    try {
+      return JSON.parse(raw.slice(start, end + 1));
+    } catch {
+      return null;
+    }
+  }
+}
+
+function splitLines(value) {
+  return String(value || '')
+    .split('\n')
+    .map((line) => line.replace(/^[•\-\d.\s]+/, '').trim())
+    .filter(Boolean);
+}
+
+function normalizeBlock(block) {
+  if (!block) return null;
+  if (typeof block === 'string') return { type: 'paragraph', text: block };
+  if (block.type === 'table') {
+    const columns = Array.isArray(block.columns) ? block.columns.map(String) : [];
+    const rows = Array.isArray(block.rows) ? block.rows.map((row) => (Array.isArray(row) ? row.map(String) : columns.map((column) => String(row?.[column] ?? '')))) : [];
+    return columns.length && rows.length ? { type: 'table', title: block.title || '', columns, rows } : null;
+  }
+  if (block.type === 'bullets' || block.type === 'steps') {
+    const items = Array.isArray(block.items) ? block.items.map(String).filter(Boolean) : splitLines(block.text);
+    return items.length ? { type: block.type, title: block.title || '', items } : null;
+  }
+  if (block.type === 'callout') {
+    const text = String(block.text || '').trim();
+    return text ? { type: 'callout', tone: block.tone || 'info', text } : null;
+  }
+  const text = String(block.text || block.content || '').trim();
+  return text ? { type: 'paragraph', text } : null;
+}
+
+function legacyBlocks(answer) {
+  const blocks = [];
+  if (answer.insight) blocks.push({ type: 'paragraph', text: answer.insight });
+  if (answer.evidence) blocks.push({ type: 'bullets', title: 'Evidence', items: splitLines(answer.evidence) });
+  if (answer.action) blocks.push({ type: 'steps', title: 'Suggested next steps', items: splitLines(answer.action) });
+  return blocks;
+}
+
+function CopilotAnswer({ content }) {
+  const blocks = (content.blocks?.length ? content.blocks : legacyBlocks(content)).map(normalizeBlock).filter(Boolean);
+  return (
+    <div className="copilot-answer">
+      {content.title ? <h3>{content.title}</h3> : null}
+      {content.summary ? <p className="answer-summary">{content.summary}</p> : null}
+      {blocks.map((block, index) => {
+        if (block.type === 'table') {
+          return (
+            <div className="answer-table-wrap" key={index}>
+              {block.title ? <h4>{block.title}</h4> : null}
+              <table className="answer-table">
+                <thead>
+                  <tr>{block.columns.map((column) => <th key={column}>{column}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, rowIndex) => (
+                    <tr key={rowIndex}>{block.columns.map((column, columnIndex) => <td key={column}>{row[columnIndex]}</td>)}</tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        if (block.type === 'bullets') {
+          return (
+            <section className="answer-section" key={index}>
+              {block.title ? <h4>{block.title}</h4> : null}
+              <ul>{block.items.map((item) => <li key={item}>{item}</li>)}</ul>
+            </section>
+          );
+        }
+        if (block.type === 'steps') {
+          return (
+            <section className="answer-section" key={index}>
+              {block.title ? <h4>{block.title}</h4> : null}
+              <ol>{block.items.map((item) => <li key={item}>{item}</li>)}</ol>
+            </section>
+          );
+        }
+        if (block.type === 'callout') return <p className={`answer-callout ${block.tone}`} key={index}>{block.text}</p>;
+        return <p key={index}>{block.text}</p>;
+      })}
+    </div>
+  );
+}
+
 export function CopilotPanel({ page, results, selectedFund, userName = 'Aniket' }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
@@ -200,16 +298,20 @@ export function CopilotPanel({ page, results, selectedFund, userName = 'Aniket' 
   function normalizeAnswer(answer) {
     if (!answer) return null;
     if (typeof answer === 'string') {
-      return {
-        insight: answer,
-        evidence: 'This response came back as plain text from the advisor service.',
-        action: 'Use the app data shown on this page to verify the decision before acting.'
-      };
+      const parsed = extractJsonObject(answer);
+      if (parsed) return normalizeAnswer(parsed);
+      return { type: 'answer', title: '', summary: answer, blocks: [{ type: 'paragraph', text: answer }] };
     }
+    const nestedInsight = typeof answer.insight === 'string' && answer.insight.trim().startsWith('{')
+      ? extractJsonObject(answer.insight)
+      : null;
+    if (nestedInsight) return normalizeAnswer({ ...answer, ...nestedInsight });
+    const blocks = (Array.isArray(answer.blocks) ? answer.blocks : legacyBlocks(answer)).map(normalizeBlock).filter(Boolean);
     return {
-      insight: answer.insight || 'I need a little more context to answer this well.',
-      evidence: answer.evidence || 'No supporting evidence was returned.',
-      action: answer.action || 'Select a fund or add portfolio details, then ask again.'
+      type: answer.type || 'answer',
+      title: answer.title || '',
+      summary: answer.summary || (!answer.blocks ? answer.insight : ''),
+      blocks: blocks.length ? blocks : [{ type: 'paragraph', text: 'I need a little more context to answer this well.' }]
     };
   }
 
@@ -289,20 +391,14 @@ export function CopilotPanel({ page, results, selectedFund, userName = 'Aniket' 
               {message.role === 'user' ? (
                 <p>{message.text}</p>
               ) : (
-                <div className="structured-answer">
-                  <p><strong>Insight</strong>{message.content.insight}</p>
-                  <p><strong>Evidence</strong>{message.content.evidence}</p>
-                  <p><strong>Action</strong>{message.content.action}</p>
-                </div>
+                <CopilotAnswer content={message.content} />
               )}
             </div>
           ))}
           {loading ? (
             <div className="message assistant">
-              <div className="structured-answer">
-                <p><strong>Insight</strong>Checking the page data and fund evidence...</p>
-                <p><strong>Evidence</strong>Using your current portfolio, selected fund, and available fund universe.</p>
-                <p><strong>Action</strong>I will return a concise recommendation with the numbers that support it.</p>
+              <div className="copilot-answer">
+                <p className="answer-summary">Checking the page data and fund evidence...</p>
               </div>
             </div>
           ) : null}

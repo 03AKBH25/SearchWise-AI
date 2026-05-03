@@ -88,18 +88,33 @@ function AppShell() {
 }
 
 function Navbar({ theme, setTheme, active, userName }) {
-  const { setSelectedFundId } = useAppState();
+  const { results, setSelectedFundId } = useAppState();
   const [search, setSearch] = useState('');
+  const [showResults, setShowResults] = useState(false);
 
-  function submit(event) {
-    event.preventDefault();
+  const filteredFunds = useMemo(() => {
+    if (!search.trim()) return [];
     const query = search.toLowerCase();
-    const fund = fundDataset.find((item) => item.fundName.toLowerCase().includes(query) || item.category.toLowerCase().includes(query));
-    if (fund) {
-      setSelectedFundId(fund.id);
-      navigate(`/fund/${fund.id}`);
-      setSearch('');
-    }
+    
+    // Contextual source selection
+    const isPortfolioContext = active === 'Portfolio' || active === 'Dashboard';
+    const source = isPortfolioContext ? results.funds : fundDataset;
+    
+    return source
+      .filter(f => {
+        const name = (f.fundName || f.name || '').toLowerCase();
+        const cat = (f.category || '').toLowerCase();
+        return name.includes(query) || cat.includes(query);
+      })
+      .slice(0, 6);
+  }, [search, active, results.funds]);
+
+  function handleSelect(fund) {
+    const id = fund.baseFundId || fund.id;
+    setSelectedFundId(id);
+    navigate(`/fund/${id}`);
+    setSearch('');
+    setShowResults(false);
   }
 
   const links = [
@@ -123,10 +138,50 @@ function Navbar({ theme, setTheme, active, userName }) {
           </button>
         ))}
       </nav>
-      <form className="global-search" onSubmit={submit}>
-        <Search size={17} />
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search funds" />
-      </form>
+      
+      <div className="search-container">
+        <form className="global-search" onSubmit={e => e.preventDefault()}>
+          <Search size={17} />
+          <input 
+            value={search} 
+            onChange={(e) => { setSearch(e.target.value); setShowResults(true); }}
+            onFocus={() => setShowResults(true)}
+            placeholder={active === 'Portfolio' ? "Search your portfolio..." : "Search all funds..."} 
+          />
+        </form>
+
+        {showResults && filteredFunds.length > 0 && (
+          <>
+            <div className="search-backdrop" onClick={() => setShowResults(false)} />
+            <div className="search-results-overlay">
+              <div className="search-header">
+                {active === 'Portfolio' ? 'Searching Portfolio' : 'Global Fund Search'}
+              </div>
+              {filteredFunds.map(fund => (
+                <button key={fund.id || fund.baseFundId} className="search-result-card" onClick={() => handleSelect(fund)}>
+                  <div className="result-info">
+                    <span className="result-name">{fund.fundName || fund.name}</span>
+                    <span className="result-meta">{fund.category} · {fund.assetClass || 'Equity'}</span>
+                  </div>
+                  <div className="result-stats">
+                    <div className="stat-item">
+                      <span className="stat-label">Expense</span>
+                      <span className="stat-value">{formatPercent(fund.directExpense || fund.currentExpense)}</span>
+                    </div>
+                    {fund.fiveYearReturn && (
+                      <div className="stat-item">
+                        <span className="stat-label">5Y Return</span>
+                        <span className="stat-value">{fund.fiveYearReturn.toFixed(1)}%</span>
+                      </div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
       <div className="nav-actions">
         <button className="icon-button" title="Notifications"><Bell size={18} /></button>
         <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">

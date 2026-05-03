@@ -216,7 +216,45 @@ function isLowExpenseQuery(query) {
   );
 }
 
-function lowExpenseShortlistResponse() {
+function isNifty50Query(query) {
+  const q = normalize(query);
+  return q.includes('nifty 50') || q.includes('nifty50');
+}
+
+function isComparisonTableQuery(query) {
+  const q = normalize(query);
+  return q.includes('table') || q.includes('tabular') || q.includes('compare') || q.includes('comparison');
+}
+
+function nifty50Response() {
+  return {
+    type: 'answer',
+    title: 'Nifty 50 Explained',
+    summary: "The Nifty 50 is a benchmark index that tracks 50 of India's largest and most liquid listed companies.",
+    blocks: [
+      {
+        type: 'paragraph',
+        text: 'Think of it as a quick health check for large Indian companies. When people say the market is up in India, they often mean indices like the Nifty 50 or Sensex moved up.'
+      },
+      {
+        type: 'bullets',
+        title: 'What it represents',
+        items: [
+          'It includes 50 large companies across sectors such as banks, IT, energy, consumer goods, autos, and healthcare.',
+          'It is market-cap weighted, so larger companies influence the index more than smaller ones.',
+          'Mutual funds and ETFs use it as a benchmark for large-cap Indian equity performance.'
+        ]
+      },
+      {
+        type: 'callout',
+        tone: 'info',
+        text: 'For investors, a Nifty 50 index fund is usually a low-cost way to get broad large-cap equity exposure, but it still carries equity-market risk.'
+      }
+    ]
+  };
+}
+
+function lowExpenseShortlistResponse(query = '') {
   const funds = [...fundDataset].sort(
     (a, b) => a.directExpense - b.directExpense || b.fiveYearReturn - a.fiveYearReturn
   );
@@ -230,30 +268,45 @@ function lowExpenseShortlistResponse() {
     .sort((a, b) => b.fiveYearReturn - a.fiveYearReturn)[0];
 
   return {
-    insight: [
-      'Low expense shortlist from the visible fund universe:',
-      ...top.map(
-        (fund, index) =>
-          `${index + 1}. ${fund.fundName} - ${formatPercent(fund.directExpense)} Direct expense, ${formatPercent(fund.fiveYearReturn)} 5Y return, ${fund.risk} risk, ${fund.category}.`
-      ),
-      '',
-      `Best low-cost return trade-off: ${bestReturnLowCost.fundName} combines ${formatPercent(bestReturnLowCost.directExpense)} Direct expense with ${formatPercent(bestReturnLowCost.fiveYearReturn)} 5Y return.`
-    ].join('\n'),
-    evidence: [
-      `Lowest visible expense: ${top[0].fundName} at ${formatPercent(top[0].directExpense)} Direct expense.`,
-      `Balanced low-cost choices excluding Very High risk: ${balanced.map((fund) => `${fund.fundName} (${formatPercent(fund.directExpense)}, ${fund.risk} risk)`).join('; ')}.`,
-      ...top.slice(0, 3).map((fund) => {
-        const gap = Math.max(0, fund.regularExpense - fund.directExpense);
-        return `${fund.fundName}: Regular ${formatPercent(fund.regularExpense)} vs Direct ${formatPercent(fund.directExpense)}, annual plan-cost gap ${formatPercent(gap)}.`;
-      })
-    ].join('\n'),
-    action: [
-      `1. Core equity choice: shortlist ${coreEquity.fundName} for low-cost broad-market exposure; verify benchmark fit before investing.`,
-      `2. Conservative choice: use ${conservative.fundName} if capital stability matters more than equity-like return.`,
-      `3. Balanced choice: compare ${hybrid.fundName} if you want equity participation with some debt allocation.`,
-      `4. Aggressive return choice: consider ${bestReturnLowCost.fundName} only if you can accept ${bestReturnLowCost.risk} risk and category concentration.`,
-      '5. Before switching existing holdings, check exit load, capital-gains tax, and overlap with funds you already own.'
-    ].join('\n')
+    type: isComparisonTableQuery(query) ? 'table' : 'comparison',
+    title: 'Low-Expense Fund Shortlist',
+    summary: `${top[0].fundName} has the lowest visible Direct expense ratio at ${formatPercent(top[0].directExpense)}, but the right choice depends on whether you want equity growth, debt stability, or a balanced fund.`,
+    blocks: [
+      {
+        type: 'table',
+        title: 'Ranked by Direct expense ratio',
+        columns: ['Rank', 'Fund', 'Direct expense', '5Y return', 'Risk', 'Category', 'Plan gap'],
+        rows: top.map((fund, index) => [
+          String(index + 1),
+          fund.fundName,
+          formatPercent(fund.directExpense),
+          formatPercent(fund.fiveYearReturn),
+          fund.risk,
+          fund.category,
+          formatPercent(Math.max(0, fund.regularExpense - fund.directExpense))
+        ])
+      },
+      {
+        type: 'bullets',
+        title: 'How to read this',
+        items: [
+          `Lowest visible expense: ${top[0].fundName} at ${formatPercent(top[0].directExpense)} Direct expense.`,
+          `Lower-volatility shortlist: ${balanced.map((fund) => `${fund.fundName} (${formatPercent(fund.directExpense)}, ${fund.risk} risk)`).join('; ')}.`,
+          `Best low-cost return trade-off: ${bestReturnLowCost.fundName} combines ${formatPercent(bestReturnLowCost.directExpense)} Direct expense with ${formatPercent(bestReturnLowCost.fiveYearReturn)} 5Y return.`
+        ]
+      },
+      {
+        type: 'steps',
+        title: 'Decision path',
+        items: [
+          `Core equity: shortlist ${coreEquity.fundName} for low-cost broad-market exposure; verify benchmark fit before investing.`,
+          `Conservative: use ${conservative.fundName} if capital stability matters more than equity-like return.`,
+          `Balanced: compare ${hybrid.fundName} if you want equity participation with some debt allocation.`,
+          `Aggressive return: consider ${bestReturnLowCost.fundName} only if you can accept ${bestReturnLowCost.risk} risk and category concentration.`,
+          'Before switching existing holdings, check exit load, capital-gains tax, and overlap with funds you already own.'
+        ]
+      }
+    ]
   };
 }
 
@@ -263,7 +316,8 @@ export function generateCopilotResponse(query, context) {
   const priorityFund = results?.funds.find((fund) => fund.status === 'Needs Action') || results?.funds[0];
   const loss = formatInr(results?.totalLoss || 0);
 
-  if (isLowExpenseQuery(query)) return lowExpenseShortlistResponse();
+  if (isNifty50Query(query)) return nifty50Response();
+  if (isLowExpenseQuery(query)) return lowExpenseShortlistResponse(query);
 
   if (page === 'Explore' || q.includes('low risk') || q.includes('alternative')) {
     const lowCost = fundDataset.filter((fund) => fund.risk !== 'Very High').sort((a, b) => a.directExpense - b.directExpense)[0];
