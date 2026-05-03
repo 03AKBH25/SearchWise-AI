@@ -101,7 +101,7 @@ select:focus {
 .landing-nav {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 48px;
 }
 
 .top-navbar {
@@ -142,7 +142,7 @@ select:focus {
 .nav-links {
   display: flex;
   gap: 26px;
-  margin: 0 auto 0 28px;
+  margin: 0 auto 0 16px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1214,8 +1214,9 @@ th {
 
 .search-container {
   position: relative;
-  flex: 1;
-  max-width: 480px;
+  flex: none;
+  width: 100%;
+  max-width: 320px;
 }
 
 .search-results-overlay {
@@ -1314,4 +1315,40 @@ th {
   right: 0;
   bottom: 0;
   z-index: 90;
+}
+
+.icon-button-clean {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.icon-button-clean:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.avatar-button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+  font-size: 0.95rem;
+  transition: transform 0.2s ease;
+}
+
+.avatar-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }

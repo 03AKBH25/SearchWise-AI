@@ -182,9 +182,11 @@ function Navbar({ theme, setTheme, active, userName }) {
       </div>
 
       <div className="nav-actions">
-        <button className="icon-button" title="Notifications"><Bell size={18} /></button>
-        <button className="profile-button" onClick={() => navigate('/profile')} title="User settings">
-          <CircleUserRound size={19} /> {userName}
+        <button className="icon-button-clean" title="Notifications">
+          <Bell size={20} strokeWidth={1.5} />
+        </button>
+        <button className="avatar-button" onClick={() => navigate('/profile')} title="User settings">
+          {userName.charAt(0)}
         </button>
       </div>
     </header>
