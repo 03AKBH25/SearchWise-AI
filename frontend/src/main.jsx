@@ -121,8 +121,7 @@ function Navbar({ theme, setTheme, active, userName }) {
     ['Dashboard', '/dashboard'],
     ['Portfolio', '/portfolio'],
     ['Explore', '/explore'],
-    ['Watchlist', '/watchlist'],
-    ['Profile', '/profile']
+    ['Watchlist', '/watchlist']
   ];
 
   return (
@@ -184,10 +183,9 @@ function Navbar({ theme, setTheme, active, userName }) {
 
       <div className="nav-actions">
         <button className="icon-button" title="Notifications"><Bell size={18} /></button>
-        <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
-          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+        <button className="profile-button" onClick={() => navigate('/profile')} title="User settings">
+          <CircleUserRound size={19} /> {userName}
         </button>
-        <button className="profile-button" title="User menu"><CircleUserRound size={19} /> {userName}</button>
       </div>
     </header>
   );
@@ -466,6 +464,8 @@ function WatchlistPage() {
 
 function ProfilePage() {
   const { results } = useAppState();
+  const [theme, setTheme] = useTheme();
+  
   return (
     <section className="stack">
       <PageHeader eyebrow="Profile" title="Your SwitchWise settings" description="Theme preference is saved locally. Portfolio data in this prototype stays in the browser session." />
@@ -475,6 +475,15 @@ function ProfilePage() {
           <Metric label="Primary goal" value="Lower avoidable costs" />
           <Metric label="Risk comfort" value="Moderate to High" />
           <Metric label="Tracked funds" value={results.funds.length} />
+        </Card>
+        <Card className="panel">
+          <SectionTitle title="Preferences" />
+          <div className="setting-row">
+            <span>Interface Theme</span>
+            <button className="theme-toggle-large" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
+              {theme === 'light' ? <><Moon size={18} /> Switch to Dark Mode</> : <><Sun size={18} /> Switch to Light Mode</>}
+            </button>
+          </div>
         </Card>
         <Card className="panel">
           <SectionTitle title="Decision Rules" />

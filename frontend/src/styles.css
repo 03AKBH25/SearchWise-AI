@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+
 :root {
   color-scheme: light;
   --bg: #f5f7f8;
@@ -43,7 +45,8 @@ body {
   min-width: 320px;
   background: var(--bg);
   color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.01em;
 }
 
 button,
@@ -138,26 +141,31 @@ select:focus {
 
 .nav-links {
   display: flex;
-  gap: 4px;
-  padding: 5px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
+  gap: 26px;
+  margin: 0 auto 0 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .nav-links button {
-  min-height: 34px;
-  padding: 0 11px;
+  min-height: auto;
+  padding: 0;
   border: 0;
-  border-radius: 7px;
   background: transparent;
   color: var(--muted);
-  font-weight: 800;
+  font-weight: 600;
+  font-size: 0.94rem;
+  transition: all 0.2s ease;
+}
+
+.nav-links button:hover {
+  color: var(--text);
 }
 
 .nav-links button.active {
-  background: var(--surface-2);
-  color: var(--text);
+  background: transparent;
+  color: var(--accent);
 }
 
 .global-search,
@@ -849,7 +857,33 @@ th {
 .profile-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 20px;
+}
+
+.setting-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.theme-toggle-large {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.theme-toggle-large:hover {
+  background: var(--surface-3);
+  border-color: var(--muted);
 }
 
 .floating-copilot {
