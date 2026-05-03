@@ -2,16 +2,28 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowRight,
+  BadgeIndianRupee,
   Bell,
   ChartNoAxesCombined,
+  CircleCheckBig,
   CircleUserRound,
+  FileSearch,
   Flame,
   LayoutDashboard,
+  Landmark,
+  Linkedin,
+  LockKeyhole,
+  MessageCircle,
   Moon,
+  RefreshCw,
+  Scale,
   Search,
   ShieldCheck,
   Sparkles,
   Sun,
+  TrendingDown,
+  TrendingUp,
+  UploadCloud,
   WalletCards
 } from 'lucide-react';
 import { AppStateProvider, useAppState } from './state/AppState';
@@ -204,6 +216,29 @@ function Router({ path }) {
 }
 
 function LandingPage({ theme, setTheme }) {
+  const sampleFunds = fundDataset.slice(0, 3);
+  const proofStats = [
+    ['₹1.42L', 'hidden loss detected', TrendingDown, 'danger'],
+    ['3', 'funds need action', FileSearch, 'warn'],
+    ['0', 'changes to your investments', LockKeyhole, 'good'],
+    ['AMFI', 'real mutual fund data reference', ShieldCheck, 'neutral']
+  ];
+  const steps = [
+    [UploadCloud, 'Add', 'Bring your portfolio into one clean view'],
+    [FileSearch, 'Analyze', 'We detect expense leaks, plan inefficiencies, and allocation risks'],
+    [TrendingUp, 'Improve', 'Get clear, prioritized actions to fix your portfolio']
+  ];
+  const outcomes = [
+    [BadgeIndianRupee, 'Hidden loss in ₹', 'See avoidable cost drag as rupee impact, not abstract percentages.'],
+    [Scale, 'Direct vs Regular comparison', 'Compare your current plan against lower-cost Direct alternatives.'],
+    [Flame, 'Funds needing action', 'Identify which holdings deserve attention before everything else.'],
+    [CircleCheckBig, 'Priority recommendations', 'Get a ranked action list built for faster decisions.']
+  ];
+
+  function scrollToSection(id) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   return (
     <main className="landing-page">
       <header className="landing-nav">
@@ -211,44 +246,199 @@ function LandingPage({ theme, setTheme }) {
           <span>SW</span>
           SwitchWise AI
         </button>
-        <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
-          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-        </button>
+        <nav className="landing-links" aria-label="Landing navigation">
+          <button onClick={() => scrollToSection('how-it-works')}>How it Works</button>
+          <button onClick={() => scrollToSection('explore')}>Explore</button>
+          <button onClick={() => scrollToSection('about')}>About</button>
+        </nav>
+        <div className="landing-nav-actions">
+          <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+          <Button variant="ghost" onClick={() => navigate('/dashboard')}>Sign In</Button>
+          <Button onClick={() => navigate('/dashboard')}>Get Started</Button>
+        </div>
       </header>
+
       <section className="landing-hero">
-        <div className="hero-panel">
-          <span className="eyebrow">Mutual fund intelligence</span>
-          <h1>You might be losing money in your mutual funds</h1>
-          <p>SwitchWise AI detects hidden expense drag, Regular plan leakage, and priority fixes without touching your transactions.</p>
+        <div className="hero-panel landing-reveal">
+          <span className="eyebrow">Mutual fund intelligence for better decisions</span>
+          <h1>You might be losing money in your mutual funds—without knowing it.</h1>
+          <p>SwitchWise AI analyzes your portfolio, detects hidden costs, and tells you exactly what to fix.</p>
           <div className="hero-actions">
             <Button onClick={() => navigate('/dashboard')}>Analyze My Portfolio <Sparkles size={18} /></Button>
-            <Button variant="ghost" onClick={() => navigate('/explore')}>Explore Funds</Button>
+            <Button variant="ghost" onClick={() => navigate('/explore')}>Try Sample Portfolio</Button>
+          </div>
+          <div className="hero-assurance">
+            <span><LockKeyhole size={15} /> No transactions</span>
+            <span><ShieldCheck size={15} /> Data-driven insights</span>
+            <span><RefreshCw size={15} /> Reversible decisions</span>
           </div>
         </div>
-        <Card className="loss-preview">
-          <Flame size={22} />
-          <span>Estimated hidden loss</span>
-          <strong>₹1.42L</strong>
-          <p>Detected across Regular plans in the sample portfolio.</p>
+
+        <Card className="hero-visual landing-reveal">
+          <div className="visual-head">
+            <div>
+              <span>Hidden loss</span>
+              <strong>₹1.42L</strong>
+            </div>
+            <span className="status-chip danger">3 funds needing action</span>
+          </div>
+          <div className="loss-meter">
+            <span style={{ width: '72%' }} />
+          </div>
+          <div className="preview-fund-list">
+            {sampleFunds.map((fund, index) => (
+              <div className="preview-fund-card" key={fund.id}>
+                <div>
+                  <strong>{fund.fundName}</strong>
+                  <span>{fund.category}</span>
+                </div>
+                <div>
+                  <em>{formatPercent(fund.regularExpense)}</em>
+                  <span>{index === 1 ? 'Review' : 'Switch'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="visual-footer">
+            <span>Priority action</span>
+            <strong>Move highest-loss Regular plan first</strong>
+          </div>
         </Card>
       </section>
-      <section className="steps-band">
-        {[
-          ['Add', 'Bring your holdings into one clean portfolio view.'],
-          ['Analyze', 'See costs, allocation, plan variants, and hidden loss.'],
-          ['Improve', 'Act on the highest-impact switches first.']
-        ].map(([title, copy]) => (
-          <Card key={title} className="step-card">
-            <span>{title}</span>
-            <p>{copy}</p>
+
+      <section className="proof-grid" aria-label="SwitchWise proof points">
+        {proofStats.map(([value, label, Icon, tone]) => (
+          <Card key={label} className={`proof-card ${tone}`}>
+            <Icon size={20} />
+            <strong>{value}</strong>
+            <span>{label}</span>
           </Card>
         ))}
       </section>
-      <div className="trust-note">
-        <ShieldCheck size={18} />
-        Uses public fund data and deterministic calculations. SwitchWise AI is a decision-support platform, not a trading platform.
-      </div>
+
+      <section className="landing-section" id="how-it-works">
+        <SectionIntro eyebrow="How it works" title="A cleaner way to diagnose your portfolio" description="SwitchWise turns scattered fund details into a practical decision view." />
+        <div className="steps-band">
+          {steps.map(([Icon, title, copy]) => (
+            <Card key={title} className="step-card">
+              <span className="step-icon"><Icon size={20} /></span>
+              <h3>{title}</h3>
+              <p>{copy}</p>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="landing-section">
+        <SectionIntro eyebrow="What you get" title="Numbers that make the next move obvious" description="The page is designed around rupee impact, plan quality, and priority actions." />
+        <div className="outcome-grid">
+          {outcomes.map(([Icon, title, copy]) => (
+            <Card key={title} className="outcome-card">
+              <Icon size={21} />
+              <h3>{title}</h3>
+              <p>{copy}</p>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="landing-section explore-showcase" id="explore">
+        <div>
+          <SectionIntro eyebrow="Explore" title="Compare funds before you act" description="Use sample fund cards to inspect category, expense ratio, and returns in one focused view." />
+          <div className="button-row explore-actions">
+            <Button onClick={() => navigate('/explore')}>Explore Funds <ArrowRight size={16} /></Button>
+            <Button variant="ghost" onClick={() => navigate('/dashboard')}>Try Sample Portfolio</Button>
+          </div>
+        </div>
+        <div className="landing-fund-grid">
+          {sampleFunds.map((fund) => (
+            <Card key={fund.id} className="landing-fund-card">
+              <div>
+                <h3>{fund.fundName}</h3>
+                <p>{fund.category}</p>
+              </div>
+              <div className="landing-fund-stats">
+                <span>Expense <strong>{formatPercent(fund.directExpense)}</strong></span>
+                <span>5Y return <strong>{fund.fiveYearReturn.toFixed(1)}%</strong></span>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="landing-section copilot-teaser">
+        <div>
+          <span className="eyebrow">Copilot</span>
+          <h2>Ask anything about your portfolio</h2>
+          <div className="query-chips">
+            <button onClick={() => navigate('/dashboard')}>Where am I losing money?</button>
+            <button onClick={() => navigate('/dashboard')}>What should I fix first?</button>
+          </div>
+        </div>
+        <Card className="chat-mock">
+          <div className="chat-row user">Where am I losing money?</div>
+          <div className="chat-row assistant">
+            <MessageCircle size={17} />
+            Your largest avoidable drag is in HDFC Flexi Cap Regular. Estimated hidden loss: ₹64,800.
+          </div>
+          <div className="chat-input"><span>Ask about risk, costs, or switches...</span><ArrowRight size={16} /></div>
+        </Card>
+      </section>
+
+      <section className="landing-section about-section" id="about">
+        <Card className="mission-card">
+          <span className="eyebrow">About SwitchWise AI</span>
+          <h2>We help investors make better decisions without bias.</h2>
+          <p>We don’t help you invest. We help you invest correctly.</p>
+        </Card>
+        <div className="about-points">
+          {[
+            [FileSearch, 'Data-driven insights'],
+            [LockKeyhole, 'No transactions'],
+            [Landmark, 'No commissions']
+          ].map(([Icon, label]) => (
+            <Card key={label} className="about-point">
+              <Icon size={20} />
+              <strong>{label}</strong>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <footer className="landing-footer">
+        <div>
+          <button className="brand" onClick={() => navigate('/')}>
+            <span>SW</span>
+            SwitchWise AI
+          </button>
+          <p>Decision support for mutual fund investors. Data sources include AMFI references and public fund information.</p>
+        </div>
+        <nav>
+          <button onClick={() => scrollToSection('about')}>About</button>
+          <button>Contact</button>
+          <button>Privacy Policy</button>
+          <button>Terms</button>
+          <button>Data sources</button>
+        </nav>
+        <div className="social-links" aria-label="Social links">
+          <button title="LinkedIn"><Linkedin size={18} /></button>
+          <button title="Community"><CircleUserRound size={18} /></button>
+          <button title="Updates"><Bell size={18} /></button>
+        </div>
+      </footer>
     </main>
+  );
+}
+
+function SectionIntro({ eyebrow, title, description }) {
+  return (
+    <div className="section-intro">
+      <span className="eyebrow">{eyebrow}</span>
+      <h2>{title}</h2>
+      <p>{description}</p>
+    </div>
   );
 }
 
