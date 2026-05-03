@@ -72,13 +72,14 @@ function AppShell() {
   const [theme, setTheme] = useTheme();
   const loggedIn = path !== '/';
   const { results, selectedFund } = useAppState();
+  const userName = 'Aniket';
 
   if (!loggedIn) return <LandingPage theme={theme} setTheme={setTheme} />;
 
   return (
     <div className="app-frame">
-      <Navbar theme={theme} setTheme={setTheme} active={routeName(path)} />
-      <CopilotPanel page={routeName(path)} results={results} selectedFund={selectedFund} />
+      <Navbar theme={theme} setTheme={setTheme} active={routeName(path)} userName={userName} />
+      <CopilotPanel page={routeName(path)} results={results} selectedFund={selectedFund} userName={userName} />
       <main className="page-shell route-transition" key={path}>
         <Router path={path} />
       </main>
@@ -86,7 +87,7 @@ function AppShell() {
   );
 }
 
-function Navbar({ theme, setTheme, active }) {
+function Navbar({ theme, setTheme, active, userName }) {
   const { setSelectedFundId } = useAppState();
   const [search, setSearch] = useState('');
 
@@ -131,7 +132,7 @@ function Navbar({ theme, setTheme, active }) {
         <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
           {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
         </button>
-        <button className="profile-button" title="User menu"><CircleUserRound size={19} /> Aniket</button>
+        <button className="profile-button" title="User menu"><CircleUserRound size={19} /> {userName}</button>
       </div>
     </header>
   );

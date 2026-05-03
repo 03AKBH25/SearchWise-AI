@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ArrowRight, Bot, Check, MessageSquare, Send, SlidersHorizontal, Star, X } from 'lucide-react';
 import { fundDataset } from '../data/fundDataset';
 import { formatInr, formatPercent, generateCopilotResponse } from '../utils/analysisEngine';
@@ -175,36 +175,18 @@ export function PieChart({ data }) {
   );
 }
 
-export function CopilotPanel({ page, results, selectedFund }) {
+function getTimeBasedGreeting(name = 'there') {
+  const hour = new Date().getHours();
+  const period = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
+  return `Good ${period}, ${name}`;
+}
+
+export function CopilotPanel({ page, results, selectedFund, userName = 'Aniket' }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
+  const [panelDraft, setPanelDraft] = useState('');
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: generateCopilotResponse('dashboard summary', { page, results, selectedFund })
-    }
-  ]);
-
-  useEffect(() => {
-    let ignore = false;
-    setMessages([
-      {
-        role: 'assistant',
-        content: generateCopilotResponse('page summary', { page, results, selectedFund })
-      }
-    ]);
-
-    askCopilot('Give me a concise page summary.', { silent: true }).then((answer) => {
-      if (!ignore && answer) {
-        setMessages([{ role: 'assistant', content: answer }]);
-      }
-    });
-
-    return () => {
-      ignore = true;
-    };
-  }, [page, results, selectedFund]);
+  const [messages, setMessages] = useState([]);
 
   function buildContext() {
     return {
@@ -250,11 +232,15 @@ export function CopilotPanel({ page, results, selectedFund }) {
     }
   }
 
-  async function submit(text = draft) {
+  async function submit(text = draft, source = 'bar') {
     const query = text.trim();
     if (!query) return;
     setMessages((current) => [...current, { role: 'user', text: query }]);
-    setDraft('');
+    if (source === 'panel') {
+      setPanelDraft('');
+    } else {
+      setDraft('');
+    }
     setOpen(true);
     const response = await askCopilot(query);
     setMessages((current) => [...current, { role: 'assistant', content: response }]);
@@ -266,6 +252,8 @@ export function CopilotPanel({ page, results, selectedFund }) {
     if (page === 'Portfolio') return 'Ask what to fix first...';
     return 'Ask about your portfolio...';
   }, [page]);
+  const greeting = useMemo(() => getTimeBasedGreeting(userName), [userName]);
+  const quickPrompts = ['Where am I losing money?', 'What should I fix first?', 'Compare these funds'];
 
   return (
     <>
@@ -286,6 +274,16 @@ export function CopilotPanel({ page, results, selectedFund }) {
           <button className="icon-button small" onClick={() => setOpen(false)} title="Close copilot"><X size={18} /></button>
         </div>
         <div className="copilot-messages">
+          {messages.length === 0 && !loading ? (
+            <div className="copilot-welcome">
+              <p>{greeting}</p>
+              <div className="quick-prompts">
+                {quickPrompts.map((item) => (
+                  <button key={item} onClick={() => submit(item, 'panel')}>{item}</button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {messages.map((message, index) => (
             <div key={index} className={`message ${message.role}`}>
               {message.role === 'user' ? (
@@ -309,11 +307,17 @@ export function CopilotPanel({ page, results, selectedFund }) {
             </div>
           ) : null}
         </div>
-        <div className="quick-prompts">
-          {['Where am I losing money?', 'What should I fix first?', 'Compare these funds'].map((item) => (
-            <button key={item} onClick={() => submit(item)}>{item}</button>
-          ))}
-        </div>
+        <form className="copilot-compose" onSubmit={(event) => { event.preventDefault(); submit(panelDraft, 'panel'); }}>
+          <input
+            value={panelDraft}
+            onChange={(event) => setPanelDraft(event.target.value)}
+            placeholder={prompt}
+            disabled={loading}
+          />
+          <button type="submit" title="Send message" disabled={loading || !panelDraft.trim()}>
+            <Send size={17} />
+          </button>
+        </form>
       </aside>
     </>
   );

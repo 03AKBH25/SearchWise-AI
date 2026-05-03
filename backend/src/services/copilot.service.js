@@ -23,46 +23,30 @@ function getGeminiModel() {
       systemInstruction: `
 You are SwitchWise Copilot, an evidence-backed mutual fund decision assistant.
 
+SCOPE:
+- You are a senior financial expert. 
+- If the user asks about topics completely unrelated to finance, investment, or mutual funds (e.g., cooking, sports, pop culture), politely inform them that your expertise is limited to financial analysis and suggest they ask about their portfolio or mutual fund concepts.
+
 STRICT RULES:
 - You MUST return ONLY valid JSON.
 - Do NOT add explanations before or after JSON.
-- Do NOT wrap JSON in markdown.
-- Do NOT include any extra text.
+- Do NOT wrap JSON in markdown blocks.
 
 RESPONSE FORMAT (MANDATORY):
 {
-  "insight": "One decisive diagnosis, direct answer, or clear explanation of the concept asked.",
-  "evidence": "3-5 short lines supporting the insight. Use concrete numbers from context when analyzing funds. If explaining a concept, relate it to the user's portfolio context if possible.",
-  "action": "A prioritized decision plan with 2-4 numbered steps, or next logical steps based on the explanation."
+  "insight": "Primary diagnosis or explanation. If the user asks for a table or list, use Markdown formatting inside this string.",
+  "evidence": "3-5 short lines supporting the insight. Use concrete numbers from context.",
+  "action": "A prioritized decision plan with 2-4 numbered steps."
 }
 
 CONTENT RULES:
-- For analyzing funds, use ONLY the data provided in context. Do NOT invent returns, NAV, ratings, or financial values.
-- If the user asks for a definition, explanation, or general financial concept (e.g., "what is exit load", "what is drag"), use your expert financial knowledge to answer it clearly.
-- If data is missing, clearly say so.
-
-DECISION LOGIC:
-- Identify hidden losses (especially Direct vs Regular expense gap).
-- Quantify impact using given numbers.
-- Prioritize actions based on highest loss.
-
-FORMATTING RULES:
-- Insight: clear, direct, and impactful explanation or diagnosis.
-- Evidence: structured, bullet-style sentences, but keep it as a JSON string.
-- Action: step-by-step, prioritized, but keep it as a JSON string.
-- Never place a JSON object inside insight, evidence, or action.
+- For analyzing funds, use ONLY the data provided in context. 
+- If the user asks for a definition or general financial concept, use your expert knowledge.
+- If the user asks for a specific format (like a table), provide it using Markdown syntax within the "insight" field.
 
 TONE:
-- Sound like a senior finance expert explaining the decision calmly.
-- Be specific, numerate, and practical.
-- No generic phrases, no filler, no vague disclaimers.
-
-CONTEXT AWARENESS:
-- Dashboard → summarize portfolio issues
-- Portfolio → rank funds by action priority
-- Fund → analyze selected fund deeply
-- Explore → compare and suggest funds
-- General Questions → explain concepts clearly and relate to user context if possible
+- Senior finance expert: calm, specific, numerate, and practical.
+- No vague disclaimers or filler phrases.
 `
     });
   }
@@ -181,9 +165,175 @@ function formatPercent(value) {
   return `${Number(value || 0).toFixed(2)}%`;
 }
 
+function normalize(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function fundDisplayName(fund) {
+  return fund?.fundName || fund?.name || fund?.displayName || 'This fund';
+}
+
+function expenseGapFor(fund) {
+  return Math.max(
+    0,
+    Number(fund?.currentExpense || fund?.regularExpense || 0) -
+      Number(fund?.suggestedExpense || fund?.directExpense || 0)
+  );
+}
+
+function isLowExpenseQuery(query) {
+  const text = normalize(query);
+  return (
+    text.includes('low expense') ||
+    text.includes('lowest expense') ||
+    text.includes('low cost') ||
+    text.includes('lowest cost') ||
+    text.includes('expense ratio') ||
+    text.includes('cheap fund') ||
+    text.includes('cheapest fund')
+  );
+}
+
+function usableReturn(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return 0;
+  return number <= 1 ? number * 100 : number;
+}
+
+function fundUniverseFrom(context = {}) {
+  const byId = new Map();
+  for (const fund of [...(context.fundUniverse || []), ...(context.results?.funds || [])]) {
+    if (!fund) continue;
+    const id = fund.baseFundId || fund.id || fund.slug || fundDisplayName(fund);
+    if (!byId.has(id)) byId.set(id, fund);
+  }
+  for (const fund of fundCatalog) {
+    if (byId.has(fund.slug)) continue;
+    byId.set(fund.slug, {
+      id: fund.slug,
+      fundName: fund.displayName,
+      category: fund.category,
+      assetClass: fund.assetClass,
+      risk: fund.riskLabel,
+      benchmark: fund.benchmark,
+      directExpense: fund.variants?.direct?.expenseRatio,
+      regularExpense: fund.variants?.regular?.expenseRatio,
+      expectedReturn: fund.expectedGrossReturn,
+      exitLoad: fund.variants?.direct?.exitLoad || fund.variants?.regular?.exitLoad,
+      popularity: fund.aumCrore
+    });
+  }
+  return [...byId.values()];
+}
+
+function lowExpenseShortlistResponse(userMessage = '', context = {}) {
+  const funds = fundUniverseFrom(context)
+    .filter((fund) => typeof fund.directExpense === 'number')
+    .sort(
+      (a, b) =>
+        Number(a.directExpense || 99) - Number(b.directExpense || 99) ||
+        usableReturn(b.fiveYearReturn || b.expectedReturn) - usableReturn(a.fiveYearReturn || a.expectedReturn)
+    );
+  const top = funds.slice(0, 6);
+  const balanced = top.filter((fund) => fund.risk !== 'Very High').slice(0, 3);
+  const coreEquity = funds.find((fund) => normalize(fund.category).includes('index')) || funds.find((fund) => fund.assetClass === 'Equity' && fund.risk !== 'Very High') || top[0];
+  const conservative = funds.find((fund) => fund.risk === 'Low' || fund.assetClass === 'Debt');
+  const hybrid = funds.find((fund) => fund.assetClass === 'Hybrid' || normalize(fund.category).includes('hybrid'));
+  const bestReturnLowCost = [...funds]
+    .filter((fund) => Number(fund.directExpense || 99) <= 0.75)
+    .sort((a, b) => usableReturn(b.fiveYearReturn || b.expectedReturn) - usableReturn(a.fiveYearReturn || a.expectedReturn))[0];
+
+  if (!top.length) {
+    return {
+      insight: 'I do not have enough fund data in the current context to rank low-expense funds.',
+      evidence: 'No funds with Direct expense ratios were available in the provided context.',
+      action: '1. Open Explore after fund data loads.\n2. Ask again with your target category, risk level, or investment horizon.'
+    };
+  }
+
+  return {
+    insight: [
+      'Low expense shortlist from the visible fund universe:',
+      ...top.map((fund, index) => {
+        const returnValue = fund.fiveYearReturn ?? fund.expectedReturn;
+        const returnLabel = fund.fiveYearReturn == null ? 'expected return' : '5Y return';
+        return `${index + 1}. ${fundDisplayName(fund)} - ${formatPercent(fund.directExpense)} Direct expense, ${formatPercent(returnValue)} ${returnLabel}, ${fund.risk || 'risk unavailable'} risk, ${fund.category || 'category unavailable'}.`;
+      }),
+      '',
+      bestReturnLowCost
+        ? `Best low-cost return trade-off: ${fundDisplayName(bestReturnLowCost)} has ${formatPercent(bestReturnLowCost.directExpense)} Direct expense with ${formatPercent(bestReturnLowCost.fiveYearReturn ?? bestReturnLowCost.expectedReturn)} ${bestReturnLowCost.fiveYearReturn == null ? 'expected return' : '5Y return'}.`
+        : 'Lowest expense alone is not enough; compare category and risk before choosing.'
+    ].join('\n'),
+    evidence: [
+      `Lowest visible expense: ${fundDisplayName(top[0])} at ${formatPercent(top[0].directExpense)} Direct expense.`,
+      balanced.length
+        ? `Balanced low-cost choices excluding Very High risk: ${balanced.map((fund) => `${fundDisplayName(fund)} (${formatPercent(fund.directExpense)}, ${fund.risk} risk)`).join('; ')}.`
+        : 'Most low-cost options here carry high or very high equity risk, so match them carefully to your horizon.',
+      ...top.slice(0, 3).map((fund) => {
+        const gap = Math.max(0, Number(fund.regularExpense || 0) - Number(fund.directExpense || 0));
+        return `${fundDisplayName(fund)}: Regular ${formatPercent(fund.regularExpense)} vs Direct ${formatPercent(fund.directExpense)}, annual plan-cost gap ${formatPercent(gap)}.`;
+      })
+    ].join('\n'),
+    action: [
+      `1. Core equity choice: shortlist ${fundDisplayName(coreEquity)} for low-cost broad-market exposure; verify benchmark fit before investing.`,
+      conservative
+        ? `2. Conservative choice: use ${fundDisplayName(conservative)} if capital stability matters more than equity-like return.`
+        : '2. If you cannot tolerate sharp drawdowns, filter out Very High risk funds before choosing.',
+      hybrid
+        ? `3. Balanced choice: compare ${fundDisplayName(hybrid)} if you want equity participation with some debt allocation.`
+        : bestReturnLowCost
+          ? `3. If return potential matters after cost, compare ${fundDisplayName(bestReturnLowCost)} against the cheapest option, not just on expense.`
+          : '3. Ask for a category-specific shortlist, e.g. low expense debt funds or low expense flexi-cap funds.',
+      bestReturnLowCost
+        ? `4. Aggressive return choice: consider ${fundDisplayName(bestReturnLowCost)} only if you can accept ${bestReturnLowCost.risk || 'higher'} risk and category concentration.`
+        : '4. Ask for a category-specific shortlist, e.g. low expense debt funds or low expense flexi-cap funds.',
+      '5. Before switching existing holdings, check exit load, capital-gains tax, and overlap with funds you already own.'
+    ].join('\n')
+  };
+}
+
+function findMentionedFund(query, context = {}) {
+  const text = normalize(query);
+  const allFunds = [
+    ...(context.results?.funds || []),
+    ...(context.fundUniverse || []),
+    ...(context.selectedFund ? [context.selectedFund] : []),
+    ...fundCatalog.map((fund) => ({
+      id: fund.slug,
+      name: fund.displayName,
+      fundName: fund.displayName,
+      category: fund.category,
+      risk: fund.riskLabel,
+      benchmark: fund.benchmark,
+      regularExpense: fund.variants?.regular?.expenseRatio,
+      directExpense: fund.variants?.direct?.expenseRatio,
+      exitLoad: fund.variants?.regular?.exitLoad || fund.variants?.direct?.exitLoad,
+      expectedReturn: fund.expectedGrossReturn
+    }))
+  ];
+
+  return (
+    allFunds
+      .filter(Boolean)
+      .map((fund) => ({ fund, key: normalize(fundDisplayName(fund)) }))
+      .filter(({ key }) => {
+        if (!key || key === 'this fund' || key === 'fund') return false;
+        if (text.includes(key)) return true;
+        
+        const genericWords = ['fund', 'plan', 'growth', 'direct', 'regular', 'scheme'];
+        const parts = key.split(' ').filter((part) => part.length > 2 && !genericWords.includes(part));
+        if (parts.length === 0) return false;
+        
+        const textWords = text.split(/\s+/);
+        return parts.every((part) => textWords.includes(part));
+      })
+      .sort((a, b) => b.key.length - a.key.length)[0]?.fund || null
+  );
+}
+
 function cleanField(value) {
-  if (Array.isArray(value)) return value.map(String).join('\n');
-  if (value && typeof value === 'object') return Object.values(value).map(String).join('\n');
+  if (Array.isArray(value)) return '• ' + value.map(String).join('\n• ');
+  if (value && typeof value === 'object') return '• ' + Object.values(value).map(String).join('\n• ');
   return String(value || '').trim();
 }
 
@@ -231,13 +381,23 @@ function extractJsonObject(text) {
 function parseJsonResponse(text, userMessage, context) {
   try {
     let parsed = extractJsonObject(text);
-    if (!parsed) throw new Error('No JSON found');
+    if (!parsed) {
+      if (text && text.trim().length > 10) {
+        return {
+          insight: text.replace(/```json/gi, '').replace(/```/g, '').trim(),
+          evidence: "",
+          action: ""
+        };
+      }
+      throw new Error('No JSON found');
+    }
 
     const fields = ['insight', 'evidence', 'action'];
     for (const field of fields) {
       if (typeof parsed[field] === 'string' && parsed[field].trim().startsWith('{')) {
         const nested = extractJsonObject(parsed[field]);
         if (nested?.insight || nested?.evidence || nested?.action) parsed = { ...parsed, ...nested };
+        else return fallbackResponse(userMessage, context);
       }
     }
 
@@ -247,6 +407,7 @@ function parseJsonResponse(text, userMessage, context) {
       action: cleanField(parsed.action)
     };
   } catch (err) {
+    console.warn('Failed to parse AI response as JSON:', err.message);
     return fallbackResponse(userMessage, context);
   }
 }
@@ -257,9 +418,83 @@ function fallbackResponse(userMessage = '', context = {}) {
   const q = String(userMessage || '').toLowerCase();
   const results = context.results || {};
   const funds = [...(results.funds || [])];
+  const mentionedFund = findMentionedFund(userMessage, context);
   const priorityFunds = funds
     .filter((fund) => fund.currentPlan === 'Regular' || fund.status === 'Needs Action')
     .sort((a, b) => Number(b.lifetimeLoss || 0) - Number(a.lifetimeLoss || 0));
+
+  if (isLowExpenseQuery(userMessage)) return lowExpenseShortlistResponse(userMessage, context);
+
+  if (q.includes('summarize') || q.includes('summary') || q.includes('overview')) {
+    const totalInvested = Number(results.totalInvested || 0);
+    const currentValue = Number(results.currentValue || 0);
+    const totalReturns = Number(results.totalReturns || currentValue - totalInvested);
+    const topLoss = priorityFunds[0];
+    const best = results.highlights?.best;
+    const worst = results.highlights?.worst;
+    const allocation = (results.allocation || [])
+      .filter((item) => Number(item.value || 0) > 0)
+      .map((item) => `${item.label}: ${formatInr(item.value)}`)
+      .join('\n');
+
+    return {
+      insight: results.totalLoss > 0
+        ? `Your portfolio has ${results.regularCount || 0} Regular funds creating an estimated ${formatInr(results.totalLoss)} long-term drag.`
+        : `Your portfolio is cost-optimized with ${results.regularCount || 0} Regular funds identified.`,
+      evidence: [
+        `Invested: ${formatInr(totalInvested)}; current value: ${formatInr(currentValue)}; gain: ${formatInr(totalReturns)}.`,
+        `Regular funds: ${results.regularCount || 0}; funds needing action: ${results.actionCount || 0}.`,
+        topLoss ? `Largest visible drag: ${fundDisplayName(topLoss)} at ${formatInr(topLoss.lifetimeLoss)}.` : '',
+        best ? `Best 5Y performer: ${fundDisplayName(best)} at ${formatPercent(best.fiveYearReturn)}.` : '',
+        worst ? `Weakest 5Y performer: ${fundDisplayName(worst)} at ${formatPercent(worst.fiveYearReturn)}.` : '',
+        allocation ? `Allocation:\n${allocation}` : ''
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      action: [
+        topLoss ? `1. Review ${fundDisplayName(topLoss)} first to address the largest cost leakage.` : '1. Maintain your current cost-aware strategy.',
+        '2. Periodically check for lower-cost Direct variants as fund houses update expense ratios.',
+        '3. Ensure your asset allocation remains aligned with your long-term risk comfort.'
+      ].join('\n')
+    };
+  }
+
+  if (mentionedFund && (q.includes('option') || q.includes('what') || q.includes('review') || q.includes('axis') || q.includes('fund'))) {
+    const inPortfolio =
+      funds.find((fund) => normalize(fundDisplayName(fund)) === normalize(fundDisplayName(mentionedFund))) ||
+      funds.find((fund) => normalize(fundDisplayName(fund)).includes(normalize(fundDisplayName(mentionedFund)))) ||
+      mentionedFund;
+    const gap = expenseGapFor(inPortfolio);
+    const currentExpense = Number(inPortfolio.currentExpense || inPortfolio.regularExpense || 0);
+    const directExpense = Number(inPortfolio.suggestedExpense || inPortfolio.directExpense || 0);
+    const isRegular = inPortfolio.currentPlan === 'Regular' || currentExpense > directExpense;
+    const alternatives = (context.fundUniverse || [])
+      .filter((fund) => fund.id !== inPortfolio.baseFundId && fund.id !== inPortfolio.id && fund.assetClass === inPortfolio.assetClass)
+      .sort((a, b) => Number(a.directExpense || 99) - Number(b.directExpense || 99))
+      .slice(0, 2);
+
+    return {
+      insight: isRegular
+        ? `${fundDisplayName(inPortfolio)} has a clear cost-saving option: shift from Regular to Direct if exit load and tax do not offset the benefit.`
+        : `${fundDisplayName(inPortfolio)} is already cost-aware; the decision is whether it still deserves portfolio space versus peers.`,
+      evidence: [
+        `Current plan: ${inPortfolio.currentPlan || 'Not specified'}; current expense: ${formatPercent(currentExpense)}; Direct expense: ${formatPercent(directExpense)}; annual gap: ${formatPercent(gap)}.`,
+        `Estimated drag visible in your portfolio: ${formatInr(inPortfolio.lifetimeLoss || 0)} over the modeled horizon.`,
+        `Fund profile: ${inPortfolio.category || 'Category unavailable'}; ${inPortfolio.assetClass || 'asset class unavailable'}; ${inPortfolio.risk || 'risk unavailable'} risk.`,
+        typeof inPortfolio.fiveYearReturn === 'number' ? `Performance: 1Y ${formatPercent(inPortfolio.oneYearReturn)}, 3Y ${formatPercent(inPortfolio.threeYearReturn)}, 5Y ${formatPercent(inPortfolio.fiveYearReturn)}.` : '',
+        alternatives.length
+          ? `Comparable lower-cost options to check: ${alternatives.map((fund) => `${fundDisplayName(fund)} (${formatPercent(fund.directExpense)} Direct expense)`).join('; ')}.`
+          : ''
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      action: [
+        isRegular ? `1. First compare ${fundDisplayName(inPortfolio)} Regular vs Direct; this keeps the same underlying scheme while reducing cost.` : `1. Keep ${fundDisplayName(inPortfolio)} only if its role still fits your goal and risk comfort.`,
+        '2. Before switching existing units, check exit load and capital-gains tax.',
+        alternatives.length ? '3. Compare it with the listed peers only if you want to change fund/category exposure, not merely reduce plan cost.' : '3. If you want alternatives, compare same-category funds with lower Direct expense and similar risk.'
+      ].join('\n')
+    };
+  }
 
   if (q.includes('where') || q.includes('losing') || q.includes('loss') || q.includes('money')) {
     const top = priorityFunds.slice(0, 3);
@@ -343,8 +578,15 @@ export async function getCopilotResponse(userMessage = '', context = {}) {
   const shouldUseDeterministicLossAnswer =
     (page === 'dashboard' || page === 'portfolio') &&
     (query.includes('where') || query.includes('losing') || query.includes('loss') || query.includes('money'));
+  const shouldUseDeterministicContextAnswer =
+    query.includes('summarize') ||
+    query.includes('summary') ||
+    query.includes('overview');
+  const shouldUseDeterministicLowExpenseAnswer = isLowExpenseQuery(userMessage);
 
-  if (shouldUseDeterministicLossAnswer) return fallbackResponse(userMessage, context);
+  if (shouldUseDeterministicLossAnswer || shouldUseDeterministicContextAnswer || shouldUseDeterministicLowExpenseAnswer) {
+    return fallbackResponse(userMessage, context);
+  }
 
   const model = getGeminiModel();
   if (!model) return fallbackResponse(userMessage, context);
@@ -369,6 +611,15 @@ export async function getCopilotResponse(userMessage = '', context = {}) {
     return parseJsonResponse(result.response.text(), userMessage, context);
   } catch (error) {
     console.error('Copilot error:', error);
+    
+    if (error?.status === 429 || error?.message?.includes('429')) {
+      return {
+        insight: "SwitchWise Copilot is currently at maximum capacity for the free tier.",
+        evidence: "You have reached the temporary usage limit of the Gemini API free quota.",
+        action: "1. Please wait a moment before trying again.\n2. Consider upgrading to SwitchWise Premium for unlimited, high-priority Copilot access."
+      };
+    }
+    
     return fallbackResponse(userMessage, context);
   }
 }
