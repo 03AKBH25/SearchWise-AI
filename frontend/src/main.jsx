@@ -266,8 +266,8 @@ function LandingPage({ theme, setTheme }) {
           <h1>You might be losing money in your mutual funds—without knowing it.</h1>
           <p>SwitchWise AI analyzes your portfolio, detects hidden costs, and tells you exactly what to fix.</p>
           <div className="hero-actions">
-            <Button onClick={() => navigate('/dashboard')}>Analyze My Portfolio <Sparkles size={18} /></Button>
-            <Button variant="ghost" onClick={() => navigate('/explore')}>Try Sample Portfolio</Button>
+            <Button className="btn-hero btn-hero-primary" onClick={() => navigate('/dashboard')}>Analyze My Portfolio <Sparkles size={18} /></Button>
+            <Button className="btn-hero btn-hero-secondary" variant="ghost" onClick={() => navigate('/explore')}>Try Sample Portfolio</Button>
           </div>
           <div className="hero-assurance">
             <span><LockKeyhole size={15} /> No transactions</span>
