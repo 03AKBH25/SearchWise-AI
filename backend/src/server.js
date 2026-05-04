@@ -7,7 +7,9 @@ import { buildAdvice, discoverFunds } from './services/advisor.service.js';
 import { getCopilotResponse } from './services/copilot.service.js';
 import passport from 'passport';
 import cookieParser from 'cookie-parser';
+import session from 'express-session';
 import { configurePassport } from './config/passport.js';
+
 import authRoutes from './routes/auth.routes.js';
 
 
@@ -19,8 +21,15 @@ app.use(cors({
   credentials: true 
 }));
 app.use(cookieParser());
+app.use(session({
+  secret: process.env.JWT_SECRET || 'switchwise_secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: process.env.NODE_ENV === 'production' }
+}));
 app.use(express.json({ limit: '1mb' }));
 app.use(passport.initialize());
+app.use(passport.session());
 
 configurePassport();
 

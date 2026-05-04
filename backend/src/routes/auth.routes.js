@@ -1,6 +1,9 @@
 import express from 'express';
 import passport from 'passport';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import User from '../models/User.js';
+
 
 const router = express.Router();
 
@@ -10,8 +13,64 @@ const signToken = (id) => {
   });
 };
 
+router.post('/register', async (req, res) => {
+  const { firstName, lastName, email, password } = req.body;
+
+  try {
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(400).json({ message: 'User already exists' });
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const user = await User.create({
+      firstName,
+      lastName,
+      name: `${firstName} ${lastName}`,
+      email,
+      password: hashedPassword
+    });
+
+    const token = signToken(user._id);
+    res.cookie('jwt', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
+    res.status(201).json({ user });
+  } catch (error) {
+    res.status(500).json({ message: 'Error creating user' });
+  }
+});
+
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const user = await User.findOne({ email }).select('+password');
+    if (!user || !user.password) return res.status(401).json({ message: 'Invalid credentials' });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
+
+    const token = signToken(user._id);
+    res.cookie('jwt', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
+    user.password = undefined;
+    res.json({ user });
+  } catch (error) {
+    res.status(500).json({ message: 'Error logging in' });
+  }
+});
+
 router.get(
   '/google',
+
   passport.authenticate('google', { scope: ['profile', 'email'], session: false })
 );
 

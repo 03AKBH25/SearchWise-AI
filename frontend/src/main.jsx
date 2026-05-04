@@ -216,12 +216,10 @@ function Navbar({ theme, setTheme, active, userName }) {
       </div>
 
       <div className="nav-actions">
-        <button className="icon-button-clean" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
-          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-        </button>
         <button className="icon-button-clean" title="Notifications">
           <Bell size={20} strokeWidth={1.5} />
         </button>
+
         <div className="user-profile-menu">
           <button className="avatar-button" title={userName}>
             {userName.charAt(0)}
@@ -232,7 +230,12 @@ function Navbar({ theme, setTheme, active, userName }) {
               <span>Pro Member</span>
             </div>
             <button onClick={() => navigate('/profile')}>Profile Settings</button>
+            <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="theme-toggle-btn">
+              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />} 
+              {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+            </button>
             <button onClick={() => useAppState().logout()} className="logout-btn">Logout</button>
+
           </div>
         </div>
       </div>
@@ -288,12 +291,10 @@ function LandingPage({ theme, setTheme }) {
           <button onClick={() => scrollToSection('about')}>About</button>
         </nav>
           <div className="landing-nav-actions">
-          <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-          </button>
           <Button variant="ghost" onClick={() => navigate('/login')}>Sign In</Button>
           <Button onClick={() => navigate('/portfolio-input')}>Get Started</Button>
         </div>
+
 
       </header>
 
@@ -488,11 +489,9 @@ function GuestExperience({ path, theme, setTheme }) {
           SwitchWise AI
         </button>
         <div className="landing-nav-actions">
-          <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-          </button>
           <Button variant="ghost" onClick={() => navigate('/')}>Back to Home</Button>
         </div>
+
       </header>
       <main className="guest-shell route-transition" key={path}>
         {path === '/portfolio-input' ? <PortfolioInputPage /> : null}
