@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { fundCatalog } from '../data/fundCatalog.js';
+import { syncAmfiData } from './dataSync.service.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -28,9 +29,11 @@ SCOPE & GUARDRAILS:
    - Financial definitions and educational concepts.
 2. STRICTLY decline non-financial queries (e.g., "how to cook", "write a poem", "sports scores"). 
    - Response for declines: Use type="refusal", title="Out of Scope", and a polite message that you are a specialized financial AI.
-3. DATA USAGE: 
-   - Use the provided "Evidence context JSON" for any fund-specific analysis.
    - If a fund mentioned by the user is NOT in the context, use your general knowledge but add a note that the specific data is not in the current portfolio view.
+4. CALCULATOR CONTEXT:
+   - If the "calculator" field is present in the context, use it to explain the specific numbers the user is seeing.
+   - Explain how time (duration) and returns (annualRate) exponentially affect the final result (totalValue).
+   - If "expenseIncluded" is true, explain how the "expenseRatio" is eating into the returns.
 
 STRICT JSON OUTPUT RULES:
 - Return ONLY valid JSON.
@@ -57,7 +60,21 @@ TONE:
 - Professional, senior financial advisor.
 - Numerate: Use percentages and currency (INR) where appropriate.
 - Direct: Avoid "I hope this helps" or "As an AI".
+
+ACTION RULES:
+- If you call "sync_latest_amfi_data", you MUST mention in your final summary that you have fetched the latest data from official sources to ensure accuracy.
 `;
+
+const tools = [
+  {
+    functionDeclarations: [
+      {
+        name: "sync_latest_amfi_data",
+        description: "Fetches the latest mutual fund NAV data and scheme details from official AMFI sources and updates the local database. Use this if a user asks about a fund that seems missing or if they specifically ask for latest official data.",
+      }
+    ]
+  }
+];
 
 function getGeminiModel() {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
@@ -68,7 +85,8 @@ function getGeminiModel() {
       const genAI = new GoogleGenerativeAI(apiKey);
       geminiModel = genAI.getGenerativeModel({
         model: MODEL_NAME,
-        systemInstruction: SYSTEM_INSTRUCTION
+        systemInstruction: SYSTEM_INSTRUCTION,
+        tools: tools
       });
     } catch (error) {
       console.error('Failed to initialize Gemini model:', error);
@@ -787,7 +805,7 @@ function fallbackResponse(userMessage = '', context = {}) {
 
 // -------------------- MAIN FUNCTION --------------------
 
-export async function getCopilotResponse(userMessage = '', context = {}) {
+export async function getCopilotResponse(userMessage = '', context = {}, onProgress = null) {
   const query = String(userMessage || '').toLowerCase();
   const page = String(context.page || '').toLowerCase();
   const mentionedFund = findMentionedFund(userMessage, context);
@@ -806,19 +824,39 @@ export async function getCopilotResponse(userMessage = '', context = {}) {
 
   let lastError;
   const maxRetries = 3;
+  const chat = model.startChat();
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 1200,
-          responseMimeType: 'application/json'
+      let result = await chat.sendMessage(prompt);
+      let response = result.response;
+      
+      const calls = response.functionCalls();
+      if (calls && calls.length > 0) {
+        console.log(`[Copilot] AI requested tool calls:`, calls.map(c => c.name));
+        const toolResults = {};
+        
+        for (const call of calls) {
+          if (call.name === 'sync_latest_amfi_data') {
+            if (onProgress) onProgress('Fetching latest mutual fund data from AMFI official sources...');
+            const syncResult = await syncAmfiData();
+            toolResults[call.name] = syncResult;
+          }
         }
-      });
+        
+        if (onProgress) onProgress('Processing synchronized data...');
+        
+        // Send tool results back to the model
+        result = await chat.sendMessage([{
+          functionResponse: {
+            name: calls[0].name,
+            response: toolResults[calls[0].name]
+          }
+        }]);
+        response = result.response;
+      }
 
-      return parseJsonResponse(result.response.text(), userMessage, context);
+      return parseJsonResponse(response.text(), userMessage, context);
     } catch (error) {
       lastError = error;
       

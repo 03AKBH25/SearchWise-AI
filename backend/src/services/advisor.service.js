@@ -1,5 +1,6 @@
 import { fundCatalog } from '../data/fundCatalog.js';
 import { getFundPair, searchFunds } from './amfi.service.js';
+import { calculateBeta, calculateSharpeRatio, calculateSortinoRatio } from './financialIntelligence.service.js';
 
 const currency = new Intl.NumberFormat('en-IN', {
   style: 'currency',
@@ -83,6 +84,11 @@ function scoreSwitch(fund, currentVariant, years, amount, monthlyContribution) {
     savings,
     annualExpenseGap: current.expenseRatio - target.expenseRatio,
     riskAdjustedDelta: sharpeTarget - sharpeCurrent,
+    ratios: {
+      sharpe: calculateSharpeRatio(currentReturn, fund.riskFreeRate, fund.standardDeviation),
+      sortino: calculateSortinoRatio(currentReturn, fund.riskFreeRate, fund.standardDeviation * 0.65),
+      beta: calculateBeta(fund.standardDeviation, 0.14, 0.88)
+    },
     confidence: Math.round(Math.max(62, Math.min(92, 90 - fund.trackingError * 350)))
   };
 }
@@ -103,6 +109,11 @@ function scoreCandidate(fund, payload) {
     benchmark: fund.benchmark,
     riskLabel: fund.riskLabel,
     aumCrore: fund.aumCrore,
+    ratios: {
+      sharpe: calculateSharpeRatio(fund.expectedGrossReturn - directVariant(fund).expenseRatio / 100, fund.riskFreeRate, fund.standardDeviation),
+      sortino: calculateSortinoRatio(fund.expectedGrossReturn - directVariant(fund).expenseRatio / 100, fund.riskFreeRate, fund.standardDeviation * 0.65),
+      beta: calculateBeta(fund.standardDeviation, 0.14, 0.88)
+    },
     directExpense: directVariant(fund).expenseRatio,
     regularExpense: regularVariant(fund).expenseRatio,
     nav: directVariant(fund).nav,
@@ -125,7 +136,7 @@ function nextBestAction(recommendations, candidates, payload) {
   const topSwitch = recommendations[0];
   if (topSwitch?.score.savings > Number(payload.amount || 250000) * 0.03) {
     return {
-      label: 'Switch existing Regular units after checking exit load and tax',
+    label: 'Compare existing Regular units after checking exit load and tax',
       reason: `${currency.format(topSwitch.score.savings)} modeled benefit over ${topSwitch.input.horizonYears} years is meaningful enough to investigate.`
     };
   }
@@ -195,8 +206,8 @@ export async function buildAdvice(payload = {}) {
       score,
       decision:
         score.target.variant === 'direct'
-          ? 'Move to the Direct variant if tax and exit load do not erase the benefit.'
-          : 'Stay Direct; switching to Regular only makes sense if human advisory value is worth the fee.',
+          ? 'Direct has lower expense; verify tax and exit load before any change.'
+          : 'Direct already has lower cost; Regular may only make sense if advisory value is explicit.',
       checks: [
         `Expense gap: ${score.annualExpenseGap.toFixed(2)} percentage points each year`,
         `Modeled wealth impact: ${currency.format(score.savings)} before tax and exit load`,

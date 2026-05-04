@@ -1,4 +1,4 @@
-export const fundDataset = [
+const rawFundDataset = [
   {
     id: 'hdfc-flexi-cap',
     key: 'hdfc flexi cap',
@@ -184,6 +184,23 @@ export const fundDataset = [
     ]
   }
 ];
+
+const intelligenceMetadata = {
+  'hdfc-flexi-cap': { benchmark: 'NIFTY 500 TRI', benchmarkReturn: 15.8, latestNav: 184.62, navDate: '2026-05-03', aumCrore: 56789, standardDeviation: 16.8, downsideDeviation: 10.7, benchmarkVolatility: 14.6, correlation: 0.91 },
+  'axis-bluechip': { benchmark: 'NIFTY 100 TRI', benchmarkReturn: 13.6, latestNav: 71.24, navDate: '2026-05-03', aumCrore: 33120, standardDeviation: 14.2, downsideDeviation: 8.9, benchmarkVolatility: 13.7, correlation: 0.94 },
+  'sbi-small-cap': { benchmark: 'BSE 250 SmallCap TRI', benchmarkReturn: 22.4, latestNav: 182.18, navDate: '2026-05-03', aumCrore: 31900, standardDeviation: 23.8, downsideDeviation: 16.4, benchmarkVolatility: 20.8, correlation: 0.86 },
+  'icici-balanced-advantage': { benchmark: 'NIFTY 50 Hybrid Composite Debt 50:50 Index', benchmarkReturn: 10.2, latestNav: 78.91, navDate: '2026-05-03', aumCrore: 58240, standardDeviation: 8.8, downsideDeviation: 5.6, benchmarkVolatility: 9.3, correlation: 0.82 },
+  'parag-parikh-flexi-cap': { benchmark: 'NIFTY 500 TRI', benchmarkReturn: 15.8, latestNav: 93.47, navDate: '2026-05-03', aumCrore: 76850, standardDeviation: 15.1, downsideDeviation: 8.8, benchmarkVolatility: 14.6, correlation: 0.84 },
+  'nippon-nifty-50': { benchmark: 'NIFTY 50 TRI', benchmarkReturn: 14.4, latestNav: 42.66, navDate: '2026-05-03', aumCrore: 11250, standardDeviation: 13.4, downsideDeviation: 8.2, benchmarkVolatility: 13.4, correlation: 0.99 },
+  'kotak-corporate-bond': { benchmark: 'CRISIL Corporate Bond Composite Index', benchmarkReturn: 7.0, latestNav: 38.18, navDate: '2026-05-03', aumCrore: 15460, standardDeviation: 3.6, downsideDeviation: 2.1, benchmarkVolatility: 3.8, correlation: 0.74 },
+  'mirae-asset-hybrid': { benchmark: 'CRISIL Hybrid 35+65 Aggressive Index', benchmarkReturn: 12.5, latestNav: 31.82, navDate: '2026-05-03', aumCrore: 8950, standardDeviation: 10.6, downsideDeviation: 6.7, benchmarkVolatility: 10.9, correlation: 0.88 }
+};
+
+export const fundDataset = rawFundDataset.map((fund) => ({
+  riskFreeRate: 6.5,
+  ...fund,
+  ...(intelligenceMetadata[fund.id] || {})
+}));
 
 export const samplePortfolio = [
   { fundId: 'hdfc-flexi-cap', fundName: 'HDFC Flexi Cap Fund Regular', amount: 320000, currentValue: 438000, years: 10 },

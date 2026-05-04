@@ -88,11 +88,26 @@ app.post('/api/copilot/chat', async (req, res, next) => {
   try {
     const { message, context } = req.body;
     console.log(`[Copilot] Received message: "${message.substring(0, 50)}..."`);
-    const response = await getCopilotResponse(message, context);
-    res.json({ response });
+    
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const response = await getCopilotResponse(message, context, (status) => {
+      res.write(`data: ${JSON.stringify({ type: 'status', status })}\n\n`);
+    });
+
+    res.write(`data: ${JSON.stringify({ type: 'final', response })}\n\n`);
+    res.end();
   } catch (error) {
     console.error('[Copilot Error]', error);
-    next(error);
+    // If headers already sent, we can't send a normal error JSON
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.end();
+    }
   }
 });
 

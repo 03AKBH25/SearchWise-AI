@@ -62,15 +62,65 @@ export function futureValue(principal, expectedReturn, expense, years) {
   return principal * Math.pow(1 + annualRate, years);
 }
 
+export function calculateLumpsum({ principal, annualRate, years }) {
+  const r = annualRate / 100;
+  const n = 1;
+
+  const futureValue = principal * Math.pow(1 + r / n, n * years);
+
+  return {
+    invested: principal,
+    returns: futureValue - principal,
+    total: futureValue,
+  };
+}
+
+export function calculateSharpeRatio(returnValue = 0, riskFreeRate = 6.5, standardDeviation = 12) {
+  const deviation = Math.max(0.1, Number(standardDeviation || 12));
+  return (Number(returnValue || 0) - Number(riskFreeRate || 0)) / deviation;
+}
+
+export function calculateSortinoRatio(returnValue = 0, riskFreeRate = 6.5, downsideDeviation = 8) {
+  const deviation = Math.max(0.1, Number(downsideDeviation || 8));
+  return (Number(returnValue || 0) - Number(riskFreeRate || 0)) / deviation;
+}
+
+export function calculateBeta(fundVolatility = 12, marketVolatility = 14, correlation = 0.88) {
+  const market = Math.max(0.1, Number(marketVolatility || 14));
+  return (Number(fundVolatility || 12) / market) * Number(correlation || 0.88);
+}
+
+export function ratioLabel(type, value) {
+  if (type === 'beta') {
+    if (value < 0.85) return 'Lower volatility';
+    if (value <= 1.15) return 'Market-like';
+    return 'Higher volatility';
+  }
+  if (value >= 0.75) return 'Good';
+  if (value >= 0.35) return 'Moderate';
+  return 'Poor';
+}
+
+function weightedAverage(funds, getter, total) {
+  if (!funds.length || !total) return 0;
+  return funds.reduce((sum, fund) => sum + getter(fund) * (fund.currentValue / total), 0);
+}
+
+function allocationImplication(equityPercent) {
+  if (equityPercent >= 75) return 'Higher equity exposure means higher volatility can show up during market declines.';
+  if (equityPercent <= 35) return 'Lower equity exposure may reduce volatility, but growth can be more muted.';
+  return 'Mixed allocation can balance growth participation with some stability.';
+}
+
 function recommendationFor(loss, amount, plan, expenseDiff) {
   if (plan === 'Direct') return 'Hold';
-  if (loss > Math.max(18000, amount * 0.045) || expenseDiff >= 0.85) return 'Switch';
+  if (loss > Math.max(18000, amount * 0.045) || expenseDiff >= 0.85) return 'Explore';
   if (loss > 3500) return 'Wait';
   return 'Hold';
 }
 
 function statusFor(recommendation) {
-  if (recommendation === 'Switch') return 'Needs Action';
+  if (recommendation === 'Explore') return 'Needs Action';
   if (recommendation === 'Wait') return 'Wait';
   return 'Optimized';
 }
@@ -101,6 +151,21 @@ export function analyzeHolding(holding, index = 0) {
     suggestedPlan: currentPlan === 'Direct' ? 'Stay Direct' : 'Direct',
     currentExpense,
     suggestedExpense,
+    latestNav: fund.latestNav,
+    navDate: fund.navDate,
+    benchmark: fund.benchmark,
+    benchmarkReturn: fund.benchmarkReturn,
+    benchmarkVolatility: fund.benchmarkVolatility,
+    aumCrore: fund.aumCrore,
+    standardDeviation: fund.standardDeviation,
+    downsideDeviation: fund.downsideDeviation,
+    correlation: fund.correlation,
+    beta: calculateBeta(fund.standardDeviation, fund.benchmarkVolatility, fund.correlation),
+    sharpeRatio: calculateSharpeRatio(fund.expectedReturn, fund.riskFreeRate, fund.standardDeviation),
+    sortinoRatio: calculateSortinoRatio(fund.expectedReturn, fund.riskFreeRate, fund.downsideDeviation),
+    directAnnualCost: Math.round((amount * suggestedExpense) / 100),
+    regularAnnualCost: Math.round((amount * fund.regularExpense) / 100),
+    annualExpenseGap: Math.round((amount * expenseDiff) / 100),
     currentFV,
     switchedFV: directFV,
     lifetimeLoss: Math.round(lifetimeLoss),
@@ -119,8 +184,10 @@ export function analyzePortfolio(portfolio) {
   const totalInvested = funds.reduce((sum, fund) => sum + fund.amount, 0);
   const currentValue = funds.reduce((sum, fund) => sum + fund.currentValue, 0);
   const totalLoss = funds.reduce((sum, fund) => sum + fund.lifetimeLoss, 0);
-  const actionCount = funds.filter((fund) => fund.status === 'Needs Action').length;
+  const highExpenseCount = funds.filter((fund) => fund.currentExpense >= 1.35).length;
+  const underperformingCount = funds.filter((fund) => fund.fiveYearReturn < (fund.benchmarkReturn || fund.fiveYearReturn) - 1).length;
   const regularCount = funds.filter((fund) => fund.currentPlan === 'Regular').length;
+  const totalReturns = currentValue - totalInvested;
   const highExpenseFunds = funds.filter((fund) => fund.currentExpense >= 1.4);
   const allocation = ['Equity', 'Debt', 'Hybrid'].map((assetClass) => ({
     label: assetClass,
@@ -128,12 +195,56 @@ export function analyzePortfolio(portfolio) {
       .filter((fund) => fund.assetClass === assetClass)
       .reduce((sum, fund) => sum + fund.currentValue, 0)
   }));
+  const allocationPercentages = allocation.map((item) => ({
+    ...item,
+    percent: currentValue ? Math.round((item.value / currentValue) * 100) : 0
+  }));
   const categoryMap = funds.reduce((map, fund) => {
     map[fund.category] = (map[fund.category] || 0) + fund.currentValue;
     return map;
   }, {});
+  const categoryDistribution = Object.entries(categoryMap)
+    .map(([label, value]) => ({ label, value, percent: currentValue ? Math.round((value / currentValue) * 100) : 0 }))
+    .sort((a, b) => b.value - a.value);
   const topCategory = Object.entries(categoryMap).sort((a, b) => b[1] - a[1])[0];
-  const totalReturns = currentValue - totalInvested;
+  const concentrationIssues = topCategory?.[1] > currentValue * 0.45 ? 1 : 0;
+  const actionBreakdown = {
+    highExpense: highExpenseCount,
+    underperformance: underperformingCount,
+    concentration: concentrationIssues
+  };
+  const actionCount = funds.filter((fund) =>
+    fund.currentExpense >= 1.35 ||
+    fund.fiveYearReturn < (fund.benchmarkReturn || fund.fiveYearReturn) - 1 ||
+    fund.status === 'Needs Action'
+  ).length + concentrationIssues;
+  const equityPercent = allocationPercentages.find((item) => item.label === 'Equity')?.percent || 0;
+  const weightedExpense = weightedAverage(funds, (fund) => fund.currentExpense, currentValue);
+  const directExpense = weightedAverage(funds, (fund) => fund.suggestedExpense, currentValue);
+  const latestNavDate = funds
+    .map((fund) => fund.navDate)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+  const ratios = {
+    sharpe: weightedAverage(funds, (fund) => fund.sharpeRatio, currentValue),
+    sortino: weightedAverage(funds, (fund) => fund.sortinoRatio, currentValue),
+    beta: weightedAverage(funds, (fund) => fund.beta, currentValue)
+  };
+  const ratioSummary = {
+    sharpe: { value: ratios.sharpe, label: ratioLabel('sharpe', ratios.sharpe) },
+    sortino: { value: ratios.sortino, label: ratioLabel('sortino', ratios.sortino) },
+    beta: { value: ratios.beta, label: ratioLabel('beta', ratios.beta) }
+  };
+  const costComparison = funds.map((fund) => ({
+    id: fund.id,
+    fundName: fund.fundName,
+    currentPlan: fund.currentPlan,
+    currentExpense: fund.currentExpense,
+    directExpense: fund.suggestedExpense,
+    annualExpenseGap: fund.annualExpenseGap,
+    longTermImpact: fund.lifetimeLoss
+  }));
   const performance = Array.from({ length: 9 }, (_, index) => {
     const year = 2018 + index;
     const progress = index / 8;
@@ -147,30 +258,35 @@ export function analyzePortfolio(portfolio) {
           id: 'regular-plan',
           title: `${regularCount} funds in Regular plans`,
           detail: 'Regular variants usually carry higher annual costs than Direct variants.',
+          description: 'Regular variants usually carry higher annual costs than Direct variants.',
           severity: 'high'
         }
       : {
           id: 'regular-plan',
           title: 'All detected plans are Direct',
           detail: 'Your visible plan selection is already cost-aware.',
+          description: 'Your visible plan selection is already cost-aware.',
           severity: 'good'
         },
     {
       id: 'expense-ratio',
       title: `${highExpenseFunds.length} high expense funds detected`,
       detail: highExpenseFunds.length ? 'These funds deserve the first review.' : 'No fund crosses the high-cost threshold.',
+      description: highExpenseFunds.length ? 'These funds deserve closer review because fees affect NAV each day.' : 'No fund crosses the high-cost threshold.',
       severity: highExpenseFunds.length ? 'medium' : 'good'
     },
     {
       id: 'category-exposure',
       title: `${topCategory?.[0] || 'Equity'} is your largest exposure`,
       detail: topCategory ? `${formatInr(topCategory[1])} sits in this category.` : 'Allocation is spread across categories.',
+      description: topCategory ? `${formatInr(topCategory[1])} sits in this category.` : 'Allocation is spread across categories.',
       severity: topCategory?.[1] > currentValue * 0.45 ? 'medium' : 'good'
     },
     {
       id: 'action-count',
-      title: `${actionCount} funds need switching`,
-      detail: 'Priority is based on cost drag and compounding impact.',
+      title: `${actionCount} high impact areas detected`,
+      detail: 'Priority is based on cost, benchmark difference, and concentration.',
+      description: 'Priority is based on cost, benchmark difference, and concentration.',
       severity: actionCount ? 'high' : 'good'
     }
   ];
@@ -186,9 +302,19 @@ export function analyzePortfolio(portfolio) {
     totalReturns,
     totalLoss,
     actionCount,
+    actionBreakdown,
     regularCount,
     optimizedGain: funds.reduce((sum, fund) => sum + Math.max(0, fund.switchedFV - fund.currentFV), 0),
     allocation,
+    allocationPercentages,
+    categoryDistribution,
+    allocationInsight: allocationImplication(equityPercent),
+    weightedExpense,
+    directExpense,
+    latestNavDate,
+    ratios,
+    ratioSummary,
+    costComparison,
     performance,
     insights,
     highlights: { best, worst, expensive },
@@ -399,7 +525,7 @@ export function generateCopilotResponse(query, context) {
     return {
       insight: `${selectedFund.fundName} looks ${currentExpense > suggestedExpense ? 'costly in your current variant' : 'cost-efficient in Direct form'}.`,
       evidence: `Current expense is ${formatPercent(currentExpense)} versus ${formatPercent(suggestedExpense)} for Direct. Estimated cost drag is ${formatInr(lifetimeLoss)}.`,
-      action: recommendation === 'Switch' ? 'Review tax and exit load, then prioritize switching this holding.' : 'Keep it on watch and compare performance against lower-cost peers.'
+      action: recommendation === 'Explore' ? 'Review tax and exit load, then compare the lower-cost variant.' : 'Keep it on watch and compare performance against lower-cost peers.'
     };
   }
 

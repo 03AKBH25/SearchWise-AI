@@ -32,7 +32,8 @@ import {
   WalletCards,
   Info,
   ChevronDown,
-  CheckCircle2
+  CheckCircle2,
+  Calculator
 } from 'lucide-react';
 
 import { AppStateProvider, useAppState } from './state/AppState';
@@ -52,7 +53,7 @@ import {
   RecommendationBadge,
   SummaryCard
 } from './components/ui';
-import { analyzeHolding, analyzePortfolio, findFundById, formatInr, formatPercent, generateCopilotResponse, getFundAlternatives } from './utils/analysisEngine';
+import { analyzeHolding, analyzePortfolio, calculateLumpsum, findFundById, formatInr, formatPercent, futureValue, generateCopilotResponse, getFundAlternatives, ratioLabel } from './utils/analysisEngine';
 import AuthPage from './components/AuthPage';
 import OnboardingPage from './components/OnboardingPage';
 import './styles.css';
@@ -88,6 +89,7 @@ function routeName(path) {
   if (path.startsWith('/portfolio')) return 'Portfolio';
   if (path.startsWith('/explore')) return 'Explore';
   if (path.startsWith('/fund/')) return 'Fund';
+  if (path.startsWith('/calculator')) return 'Calculator';
   if (path.startsWith('/watchlist')) return 'Watchlist';
   if (path.startsWith('/profile')) return 'Profile';
   return 'Dashboard';
@@ -96,7 +98,7 @@ function routeName(path) {
 function AppShell() {
   const path = useRoute();
   const [theme, setTheme] = useTheme();
-  const { user, isAuthenticated, isLoading, results, selectedFund } = useAppState();
+  const { user, isAuthenticated, isLoading, results, selectedFund, calculatorState } = useAppState();
   
   const isGuestRoute = ['/', '/portfolio-input', '/processing', '/analysis-preview', '/sample-analysis', '/login'].includes(path);
   const userName = user?.name || 'Guest';
@@ -131,7 +133,13 @@ function AppShell() {
   return (
     <div className="app-frame">
       <Navbar theme={theme} setTheme={setTheme} active={routeName(path)} userName={userName} />
-      <CopilotPanel page={routeName(path)} results={results} selectedFund={selectedFund} userName={userName} />
+      <CopilotPanel 
+        page={routeName(path)} 
+        results={results} 
+        selectedFund={selectedFund} 
+        userName={userName} 
+        calculatorState={calculatorState}
+      />
       <main className="page-shell route-transition" key={path}>
         <Router path={path} />
       </main>
@@ -174,6 +182,7 @@ function Navbar({ theme, setTheme, active, userName }) {
     ['Dashboard', '/dashboard'],
     ['Portfolio', '/portfolio'],
     ['Explore', '/explore'],
+    ['Calculator', '/calculator/lumpsum'],
     ['Watchlist', '/watchlist']
   ];
 
@@ -265,8 +274,10 @@ function Navbar({ theme, setTheme, active, userName }) {
 
 function Router({ path }) {
   if (path === '/dashboard') return <DashboardPage />;
+  if (path.startsWith('/analysis/')) return <AnalysisDetailPage path={path} />;
   if (path === '/portfolio') return <PortfolioPage />;
   if (path === '/explore') return <ExplorePage />;
+  if (path === '/calculator/lumpsum') return <LumpsumCalculatorPage />;
   if (path.startsWith('/fund/')) return <FundDetailPage path={path} />;
   if (path === '/watchlist') return <WatchlistPage />;
   if (path === '/profile') return <ProfilePage />;
@@ -931,17 +942,13 @@ function DashboardPage() {
     .slice(0, 3);
 
   const nextSteps = [
-    results.regularCount > 0 ? `Switch ${results.regularCount} Regular funds to Direct` : null,
-    results.actionCount > 0 ? `Review top ${priorityFunds.length} priority funds` : null,
+    results.regularCount > 0 ? `Review ${results.regularCount} Regular-plan cost gaps` : null,
+    results.actionCount > 0 ? `Open ${priorityFunds.length} high impact areas` : null,
     'Set up cost-tracking alerts'
   ].filter(Boolean);
 
-  const equityAllocation = results.allocation.find(a => a.label === 'Equity')?.value || 0;
-  const allocationInsight = equityAllocation > 70 
-    ? "High equity exposure -> Expect higher volatility but better long-term growth."
-    : equityAllocation < 30 
-    ? "Low equity exposure -> Lower risk but might struggle to beat inflation."
-    : "Balanced allocation -> Mix of stability and growth potential.";
+  const equityAllocation = results.allocationPercentages.find(a => a.label === 'Equity')?.percent || 0;
+  const allocationInsight = results.allocationInsight;
 
   return (
     <section className="stack dashboard-stack">
@@ -955,16 +962,49 @@ function DashboardPage() {
       </div>
 
       <div className="summary-grid">
-        <SummaryCard label="Total invested" value={formatInr(results.totalInvested)} detail="Across tracked funds" icon={WalletCards} />
-        <SummaryCard label="Current value" value={formatInr(results.currentValue)} detail={`${formatInr(results.totalReturns)} total returns`} tone="good" icon={ChartNoAxesCombined} />
-        <SummaryCard label="Avoidable loss" value={formatInr(results.totalLoss)} detail="Expense drag over time" tone="danger" icon={Flame} tooltip="Total extra cost you'll pay due to high-expense variants like Regular plans." />
-        <SummaryCard label="Action required" value={results.actionCount} detail="High-impact fixes" tone="warn" icon={Sparkles} />
+        <SummaryCard
+          label="Total invested"
+          value={formatInr(results.totalInvested)}
+          detail={`${equityAllocation}% equity allocation`}
+          icon={WalletCards}
+          tooltip="Allocation shows how your portfolio is spread across equity, debt, and hybrid funds. Equity can bring more volatility."
+          onClick={() => navigate('/analysis/allocation')}
+        >
+          <AllocationMiniBar data={results.allocationPercentages} />
+        </SummaryCard>
+        <SummaryCard
+          label="Current value"
+          value={formatInr(results.currentValue)}
+          detail={`Based on latest NAV${results.latestNavDate ? ` (${results.latestNavDate})` : ''}`}
+          tone="good"
+          icon={ChartNoAxesCombined}
+          tooltip="NAV is the per-unit value published by the fund. Portfolio value changes when NAV changes."
+          onClick={() => navigate('/analysis/value')}
+        />
+        <SummaryCard
+          label="Cost Impact"
+          value={formatInr(results.totalLoss)}
+          detail={`${formatPercent(results.weightedExpense)} current weighted cost`}
+          tone="danger"
+          icon={Flame}
+          tooltip="Higher expense ratios reduce long-term returns because costs are reflected in daily NAV."
+          onClick={() => navigate('/analysis/cost')}
+        />
+        <SummaryCard
+          label="Action required"
+          value={results.actionCount}
+          detail="High impact areas"
+          tone="warn"
+          icon={Sparkles}
+          tooltip="Flagged areas include high expense, benchmark difference, and category concentration."
+          onClick={() => navigate('/analysis/actions')}
+        />
       </div>
 
       <div className="dashboard-intelligence-grid">
         {/* PRIORITY ACTIONS */}
         <Card className="panel priority-panel">
-          <SectionTitle title="Fix These First" action="View All" onAction={() => navigate('/portfolio')} />
+          <SectionTitle title="High Impact Areas" action="View All" onAction={() => navigate('/analysis/actions')} />
           <div className="priority-list">
             {priorityFunds.length > 0 ? priorityFunds.map((fund, idx) => (
               <div key={fund.id} className="priority-action-item">
@@ -973,16 +1013,16 @@ function DashboardPage() {
                 </div>
                 <div className="priority-info">
                   <strong>{fund.fundName}</strong>
-                  <span>Losing {formatInr(fund.lifetimeLoss)} | {fund.currentPlan}</span>
+                  <span>{formatInr(fund.lifetimeLoss)} cost impact | {fund.currentPlan}</span>
                 </div>
                 <Button variant="ghost" onClick={() => { setSelectedFundId(fund.baseFundId); navigate(`/fund/${fund.baseFundId}`); }}>
-                  Review
+                  Explore
                 </Button>
               </div>
             )) : (
               <div className="empty-state">
                 <CheckCircle2 className="good" />
-                <p>No urgent actions detected. Your portfolio is well-optimized.</p>
+                <p>No urgent high impact areas detected in this model.</p>
               </div>
             )}
           </div>
@@ -990,22 +1030,21 @@ function DashboardPage() {
 
         {/* IMPACT PROJECTION */}
         <Card className="panel impact-card">
-          <SectionTitle title="If you optimize today" />
+          <SectionTitle title="Cost Context" />
           <div className="impact-projection-content">
             <div className="impact-stat">
-              <span className="impact-label">Projected Gain</span>
-              <strong className="impact-value good">+{formatInr(results.totalLoss)}</strong>
+              <span className="impact-label">Long-term Cost Impact</span>
+              <strong className="impact-value good">{formatInr(results.totalLoss)}</strong>
             </div>
             <div className="impact-stat">
-              <span className="impact-label">New Expense Avg</span>
-              <strong className="impact-value">0.72%</strong>
+              <span className="impact-label">Direct Weighted Cost</span>
+              <strong className="impact-value">{formatPercent(results.directExpense)}</strong>
             </div>
             <p className="impact-copy">
-              By switching to Direct plans, you eliminate the intermediary commission drag, 
-              directly boosting your compound growth over the next 10+ years.
+              Direct variants have lower expense ratios in this dataset. Lower costs may improve net outcomes, before tax and exit-load effects.
             </p>
             <div className="impact-badge">
-              <TrendingUp size={16} /> Estimated 18% higher wealth corpus
+              <TrendingUp size={16} /> Educational estimate, not guaranteed
             </div>
           </div>
         </Card>
@@ -1032,7 +1071,7 @@ function DashboardPage() {
                   <div className="insight-details landing-reveal">
                     <div className="why-layer">
                       <h4>Why this is happening?</h4>
-                      <p>Regular plans include a hidden commission fee paid to brokers. Over time, this fee compounds, reducing your final wealth significantly.</p>
+                      <p>Regular plans usually include distribution costs. Those costs are reflected through NAV and can reduce long-term net returns.</p>
                     </div>
                     <div className="risk-cost-layer">
                       <h4>Cost of Action</h4>
@@ -1045,6 +1084,16 @@ function DashboardPage() {
                 )}
               </div>
             ))}
+          </div>
+        </Card>
+
+        {/* RATIOS + INTERPRETATION */}
+        <Card className="panel ratios-panel">
+          <SectionTitle title="Financial Ratios" action="Deep dive" onAction={() => navigate('/analysis/ratios')} />
+          <div className="ratio-grid">
+            <RatioTile label="Sharpe Ratio" value={results.ratioSummary.sharpe.value} badge={results.ratioSummary.sharpe.label} tooltip="Sharpe compares return with total volatility. Higher is generally better for risk-adjusted performance." />
+            <RatioTile label="Beta" value={results.ratioSummary.beta.value} badge={results.ratioSummary.beta.label} tooltip="Beta shows sensitivity to the market. Above 1 means more movement than the benchmark." />
+            <RatioTile label="Sortino" value={results.ratioSummary.sortino.value} badge={results.ratioSummary.sortino.label} tooltip="Sortino focuses on downside volatility, so it highlights harmful fluctuations." />
           </div>
         </Card>
 
@@ -1091,11 +1140,31 @@ function DashboardPage() {
             ))}
           </div>
           <Button onClick={() => navigate('/portfolio')} className="w-full mt-16">
-            Execute Priority Switches
+            Explore Priority Areas
           </Button>
         </Card>
       </div>
     </section>
+  );
+}
+
+function AllocationMiniBar({ data }) {
+  return (
+    <div className="allocation-mini-bar" aria-label="Mini allocation bar">
+      {data.map((item, index) => (
+        <span key={item.label} className={`allocation-slice slice-${index}`} style={{ width: `${Math.max(2, item.percent)}%` }} title={`${item.label}: ${item.percent}%`} />
+      ))}
+    </div>
+  );
+}
+
+function RatioTile({ label, value, badge, tooltip }) {
+  return (
+    <button className="ratio-tile" onClick={() => navigate('/analysis/ratios')} title={tooltip}>
+      <span>{label}</span>
+      <strong>{Number(value || 0).toFixed(2)}</strong>
+      <em>{badge}</em>
+    </button>
   );
 }
 
@@ -1130,6 +1199,145 @@ function PortfolioHealthCard({ score, results }) {
         </div>
       </div>
     </Card>
+  );
+}
+
+function AnalysisDetailPage({ path }) {
+  const { results, setSelectedFundId } = useAppState();
+  const topic = path.replace('/analysis/', '');
+  const titleMap = {
+    allocation: ['Allocation Intelligence', 'How your money is spread and what that implies for volatility.'],
+    value: ['Current Value Context', 'How NAV updates translate into portfolio value over time.'],
+    cost: ['Cost Impact', 'How expense ratios differ between variants and show up through NAV.'],
+    actions: ['Action Required', 'Why funds are flagged and where to explore alternatives.'],
+    ratios: ['Financial Ratios', 'Risk-adjusted performance, market sensitivity, and downside risk.']
+  };
+  const [title, description] = titleMap[topic] || titleMap.allocation;
+  const flaggedFunds = results.funds.filter((fund) =>
+    fund.currentExpense >= 1.35 ||
+    fund.fiveYearReturn < (fund.benchmarkReturn || fund.fiveYearReturn) - 1 ||
+    fund.status === 'Needs Action'
+  );
+
+  return (
+    <section className="stack">
+      <PageHeader eyebrow="Deep Analysis" title={title} description={description} />
+      <p className="compliance-note"><ShieldCheck size={16} /> We provide insights, not investment advice.</p>
+
+      {topic === 'allocation' ? (
+        <div className="analysis-grid">
+          <Card className="panel">
+            <SectionTitle title="Allocation Split" />
+            <PieChart data={results.allocation} />
+          </Card>
+          <Card className="panel">
+            <SectionTitle title="What it implies" />
+            <p className="muted-copy">{results.allocationInsight}</p>
+            <div className="comparison-table-card">
+              <table>
+                <thead><tr><th>Category</th><th>Value</th><th>Share</th><th>Risk meaning</th></tr></thead>
+                <tbody>
+                  {results.categoryDistribution.map((item) => (
+                    <tr key={item.label}><td>{item.label}</td><td>{formatInr(item.value)}</td><td>{item.percent}%</td><td>{item.percent > 40 ? 'Concentrated area to monitor' : 'Balanced within current mix'}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      ) : null}
+
+      {topic === 'value' ? (
+        <div className="analysis-grid">
+          <Card className="panel wide">
+            <SectionTitle title="Portfolio Growth" />
+            <LineChart points={results.performance} />
+          </Card>
+          <Card className="panel">
+            <SectionTitle title="NAV explained" />
+            <p className="muted-copy">NAV is the per-unit value of a fund after assets and expenses are reflected. Your current value is estimated from units multiplied by the latest available NAV.</p>
+            <Metric label="Latest NAV date" value={results.latestNavDate || 'Daily update'} />
+            <Metric label="Current value" value={formatInr(results.currentValue)} />
+          </Card>
+        </div>
+      ) : null}
+
+      {topic === 'cost' ? (
+        <div className="analysis-grid">
+          <Card className="panel comparison-table-card wide">
+            <SectionTitle title="Direct vs Regular Cost View" />
+            <table>
+              <thead><tr><th>Fund</th><th>Current</th><th>Direct</th><th>Annual gap</th><th>Long-term cost impact</th></tr></thead>
+              <tbody>
+                {results.costComparison.map((item) => (
+                  <tr key={item.id}><td>{item.fundName}</td><td>{formatPercent(item.currentExpense)}</td><td>{formatPercent(item.directExpense)}</td><td>{formatInr(item.annualExpenseGap)}</td><td>{formatInr(item.longTermImpact)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+          <Card className="panel">
+            <SectionTitle title="How cost appears" />
+            <p className="muted-copy">Expense ratio is deducted inside the fund’s accounting and reflected in NAV. A higher expense ratio can reduce net return over long periods.</p>
+            <p className="answer-callout warning">Example scenario only: lower expense may improve net outcomes, but tax, exit load, and suitability can change the result.</p>
+          </Card>
+        </div>
+      ) : null}
+
+      {topic === 'actions' ? (
+        <div className="analysis-grid">
+          <Card className="panel">
+            <SectionTitle title="Flag Summary" />
+            <Metric label="High expense" value={results.actionBreakdown.highExpense} />
+            <Metric label="Benchmark difference" value={results.actionBreakdown.underperformance} />
+            <Metric label="Concentration" value={results.actionBreakdown.concentration} />
+          </Card>
+          <Card className="panel comparison-table-card wide">
+            <SectionTitle title="Flagged Funds" />
+            <table>
+              <thead><tr><th>Fund</th><th>Why flagged</th><th>Benchmark</th><th>Explore</th></tr></thead>
+              <tbody>
+                {flaggedFunds.map((fund) => (
+                  <tr key={fund.id}>
+                    <td>{fund.fundName}</td>
+                    <td>{fund.currentExpense >= 1.35 ? 'Higher expense' : 'Differs from benchmark'}</td>
+                    <td>{fund.benchmark}</td>
+                    <td><Button variant="secondary" onClick={() => { setSelectedFundId(fund.baseFundId); navigate(`/fund/${fund.baseFundId}`); }}>Explore options</Button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      ) : null}
+
+      {topic === 'ratios' ? (
+        <div className="analysis-grid">
+          {[
+            ['Sharpe Ratio', results.ratioSummary.sharpe, 'Compares return with total volatility. Higher values usually mean better compensation for risk.'],
+            ['Beta', results.ratioSummary.beta, 'Shows movement versus benchmark. Near 1 is market-like; above 1 moves more.'],
+            ['Sortino Ratio', results.ratioSummary.sortino, 'Focuses on downside risk, so it separates harmful volatility from upside movement.']
+          ].map(([label, ratio, copy]) => (
+            <Card className="panel ratio-explain-card" key={label}>
+              <SectionTitle title={label} />
+              <strong>{Number(ratio.value || 0).toFixed(2)}</strong>
+              <span className="badge review">{ratio.label}</span>
+              <p className="muted-copy">{copy}</p>
+            </Card>
+          ))}
+          <Card className="panel comparison-table-card wide">
+            <SectionTitle title="Fund vs Benchmark" />
+            <table>
+              <thead><tr><th>Fund</th><th>Sharpe</th><th>Beta</th><th>Benchmark</th><th>Signal</th></tr></thead>
+              <tbody>
+                {results.funds.map((fund) => (
+                  <tr key={fund.id}><td>{fund.fundName}</td><td>{fund.sharpeRatio.toFixed(2)}</td><td>{fund.beta.toFixed(2)}</td><td>{fund.benchmark}</td><td>{ratioLabel('sharpe', fund.sharpeRatio)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -1218,6 +1426,174 @@ function ExplorePage() {
   );
 }
 
+function LumpsumCalculatorPage() {
+  const { setCalculatorState } = useAppState();
+  const [principal, setPrincipal] = useState(100000);
+  const [annualRate, setAnnualRate] = useState(12);
+  const [duration, setDuration] = useState(5);
+  const [durationUnit, setDurationUnit] = useState('Years');
+  const [includeExpense, setIncludeExpense] = useState(false);
+  const [expenseRatio, setExpenseRatio] = useState(0.75);
+
+  const safePrincipal = Math.max(0, Number(principal) || 0);
+  const safeRate = Math.min(20, Math.max(5, Number(annualRate) || 5));
+  const safeDuration = Math.max(0, Number(duration) || 0);
+  const years = durationUnit === 'Months' ? safeDuration / 12 : safeDuration;
+  const safeExpense = includeExpense ? Math.min(2.5, Math.max(0, Number(expenseRatio) || 0)) : 0;
+  const effectiveRate = Math.max(0, safeRate - safeExpense);
+  const result = useMemo(
+    () => calculateLumpsum({ principal: safePrincipal, annualRate: effectiveRate, years }),
+    [safePrincipal, effectiveRate, years]
+  );
+
+  useEffect(() => {
+    setCalculatorState({
+      type: 'Lumpsum',
+      inputs: {
+        principal: safePrincipal,
+        annualRate: safeRate,
+        duration: safeDuration,
+        unit: durationUnit,
+        expenseIncluded: includeExpense,
+        expenseRatio: safeExpense,
+        effectiveRate
+      },
+      result: {
+        totalValue: result.totalValue,
+        wealthGained: result.wealthGained,
+        invested: result.investedAmount
+      }
+    });
+    return () => setCalculatorState(null);
+  }, [safePrincipal, safeRate, safeDuration, durationUnit, includeExpense, safeExpense, effectiveRate, result]);
+  const sensitivityRate = Math.max(0, effectiveRate - 2);
+  const sensitivity = useMemo(
+    () => calculateLumpsum({ principal: safePrincipal, annualRate: sensitivityRate, years }),
+    [safePrincipal, sensitivityRate, years]
+  );
+  const validationMessages = [
+    safePrincipal <= 0 ? 'Enter an amount greater than zero.' : null,
+    safeDuration <= 0 ? 'Enter a time period greater than zero.' : null,
+    Number(annualRate) < 5 || Number(annualRate) > 20 ? 'Expected return is kept within the realistic 5% to 20% range.' : null
+  ].filter(Boolean);
+
+  function updateRate(value) {
+    setAnnualRate(Math.min(20, Math.max(5, Number(value) || 5)));
+  }
+
+  return (
+    <section className="stack calculator-page">
+      <PageHeader
+        eyebrow="Calculator"
+        title="Mutual Fund Lumpsum Calculator"
+        description="Estimate how a one-time amount may grow with annual compounding, clear assumptions, and sensitivity built in."
+      />
+
+      <div className="calculator-layout">
+        <Card className="panel calculator-input-panel">
+          <SectionTitle title="Inputs" />
+          <label>
+            <span>Investment Amount (₹)</span>
+            <input type="number" min="1" step="1000" value={principal} onChange={(event) => setPrincipal(event.target.value)} onBlur={() => setPrincipal(safePrincipal || 100000)} />
+          </label>
+
+          <div className="calculator-control">
+            <div className="control-head">
+              <span>Expected Annual Return (% p.a)</span>
+              <input type="number" min="5" max="20" step="0.1" value={annualRate} onChange={(event) => updateRate(event.target.value)} />
+            </div>
+            <input type="range" min="5" max="20" step="0.1" value={safeRate} onChange={(event) => updateRate(event.target.value)} />
+            <p className="muted-copy">Use a realistic expected return range. This is not a promise of future performance.</p>
+          </div>
+
+          <div className="time-control">
+            <label>
+              <span>Time Period</span>
+              <input type="number" min="1" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} onBlur={() => setDuration(safeDuration || 5)} />
+            </label>
+            <label>
+              <span>Unit</span>
+              <select value={durationUnit} onChange={(event) => setDurationUnit(event.target.value)}>
+                <option>Years</option>
+                <option>Months</option>
+              </select>
+            </label>
+          </div>
+
+          <label className="expense-toggle">
+            <input type="checkbox" checked={includeExpense} onChange={(event) => setIncludeExpense(event.target.checked)} />
+            <span>Include expense ratio impact</span>
+          </label>
+
+          {includeExpense ? (
+            <div className="calculator-control">
+              <div className="control-head">
+                <span>Expense Ratio (%)</span>
+                <input type="number" min="0" max="2.5" step="0.05" value={expenseRatio} onChange={(event) => setExpenseRatio(event.target.value)} />
+              </div>
+              <input type="range" min="0" max="2.5" step="0.05" value={safeExpense} onChange={(event) => setExpenseRatio(event.target.value)} />
+              <p className="muted-copy">Effective return used: {effectiveRate.toFixed(2)}% p.a after expense impact.</p>
+            </div>
+          ) : null}
+
+          {validationMessages.length ? (
+            <div className="calculator-validation">
+              {validationMessages.map((message) => <p key={message}><AlertCircle size={15} />{message}</p>)}
+            </div>
+          ) : null}
+        </Card>
+
+        <Card className="panel calculator-output-panel">
+          <SectionTitle title="Estimated Output" />
+          <div className="calculator-result-grid">
+            <Metric label="Invested Amount" value={formatInr(result.invested)} />
+            <Metric label="Estimated Returns" value={formatInr(result.returns)} strong />
+            <Metric label="Total Value" value={formatInr(result.total)} />
+          </div>
+          <LumpsumDonut invested={result.invested} returns={result.returns} />
+          <div className="formula-card">
+            <Calculator size={18} />
+            <p><strong>Formula used</strong> FV = P * (1 + r / n) ^ (n * t), where n = 1 for annual compounding.</p>
+          </div>
+        </Card>
+      </div>
+
+      <div className="calculator-learning-grid">
+        <Card className="panel">
+          <SectionTitle title="How returns are calculated" />
+          <p className="muted-copy">Returns are calculated using annual compounding. The time period is converted to years when you select months, so 18 months becomes 1.5 years.</p>
+          <p className="answer-callout warning">This is an estimate, not guaranteed returns. Actual returns may vary depending on market performance.</p>
+        </Card>
+        <Card className="panel sensitivity-card">
+          <SectionTitle title="Rate Sensitivity" />
+          <p>If return rate decreases by 2%, final value becomes <strong>{formatInr(sensitivity.total)}</strong>.</p>
+          <span>Difference from current estimate: {formatInr(Math.max(0, result.total - sensitivity.total))}</span>
+        </Card>
+      </div>
+    </section>
+  );
+}
+
+function LumpsumDonut({ invested, returns }) {
+  const total = Math.max(1, Number(invested || 0) + Number(returns || 0));
+  const returnShare = Math.max(0, Math.min(100, (Number(returns || 0) / total) * 100));
+  const investedShare = 100 - returnShare;
+
+  return (
+    <div className="lumpsum-donut-wrap">
+      <svg className="lumpsum-donut" viewBox="0 0 120 120" role="img" aria-label="Invested amount and estimated returns donut chart">
+        <circle className="donut-track" cx="60" cy="60" r="42" />
+        <circle className="donut-invested" cx="60" cy="60" r="42" strokeDasharray={`${investedShare} ${100 - investedShare}`} strokeDashoffset="25" />
+        <circle className="donut-returns" cx="60" cy="60" r="42" strokeDasharray={`${returnShare} ${100 - returnShare}`} strokeDashoffset={`${25 - investedShare}`} />
+      </svg>
+      <div className="donut-legend">
+        <span><i className="invested-dot" />Invested {Math.round(investedShare)}%</span>
+        <span><i className="returns-dot" />Returns {Math.round(returnShare)}%</span>
+      </div>
+    </div>
+  );
+}
+
 function FundDetailPage({ path }) {
   const { results, guestResults, setSelectedFundId } = useAppState();
   const id = decodeURIComponent(path.replace('/fund/', ''));
@@ -1226,6 +1602,8 @@ function FundDetailPage({ path }) {
   const portfolioFund = activeResults.funds.find((item) => item.baseFundId === id);
   const analyzed = portfolioFund || analyzeHolding({ fundId: id, fundName: `${fund.fundName} Regular`, amount: 250000, currentValue: 286000, years: 8 });
   const alternatives = getFundAlternatives(fund.id, 3);
+  const [calculator, setCalculator] = useState({ amount: 100000, duration: 5 });
+  const projectedValue = futureValue(Number(calculator.amount), fund.expectedReturn, fund.directExpense, Number(calculator.duration));
 
   useEffect(() => setSelectedFundId(id), [id, setSelectedFundId]);
 
@@ -1234,19 +1612,22 @@ function FundDetailPage({ path }) {
       <PageHeader eyebrow="Fund Detail" title={fund.fundName} description={`${fund.category} · ${fund.assetClass} · ${fund.risk} risk`} />
       <div className="fund-detail-grid">
         <Card className="panel wide">
-          <SectionTitle title="Performance" />
+          <SectionTitle title="Performance vs Benchmark" />
           <div className="return-strip">
             <Metric label="1Y" value={`${fund.oneYearReturn.toFixed(1)}%`} />
             <Metric label="3Y" value={`${fund.threeYearReturn.toFixed(1)}%`} />
             <Metric label="5Y" value={`${fund.fiveYearReturn.toFixed(1)}%`} />
           </div>
-          <GrowthComparisonChart fund={analyzed} />
+          <BenchmarkComparisonChart fund={fund} />
+          <p className="muted-copy">Benchmark: {fund.benchmark}. Difference from benchmark helps explain whether returns came from fund choices or broader market movement.</p>
         </Card>
         <Card className="panel">
           <SectionTitle title="Cost" />
           <Metric label="Direct expense" value={formatPercent(fund.directExpense)} />
           <Metric label="Regular expense" value={formatPercent(fund.regularExpense)} />
           <Metric label="Exit load" value={fund.exitLoad} />
+          <Metric label="AUM" value={`Rs. ${fund.aumCrore?.toLocaleString('en-IN')} Cr`} />
+          <p className="muted-copy trust-copy" title="AUM shows the size of assets managed in the fund. Very small or very large funds can behave differently operationally.">AUM: {fund.aumCrore?.toLocaleString('en-IN')} Cr</p>
         </Card>
         <Card className="panel">
           <SectionTitle title="Variant Comparison" />
@@ -1254,6 +1635,13 @@ function FundDetailPage({ path }) {
           <div className="comparison-row"><span>Lower-cost variant</span><strong>Direct</strong></div>
           <div className="comparison-row"><span>Estimated cost drag</span><strong>{formatInr(analyzed.lifetimeLoss)}</strong></div>
           <RecommendationBadge value={analyzed.recommendation} />
+        </Card>
+        <Card className="panel">
+          <SectionTitle title="Educational Calculator" />
+          <label><span>Amount</span><input type="number" min="1000" step="1000" value={calculator.amount} onChange={(event) => setCalculator((current) => ({ ...current, amount: event.target.value }))} /></label>
+          <label><span>Duration</span><input type="number" min="1" max="30" value={calculator.duration} onChange={(event) => setCalculator((current) => ({ ...current, duration: event.target.value }))} /></label>
+          <Metric label="Projected value" value={formatInr(projectedValue)} />
+          <p className="answer-callout warning">This is an estimate, not guaranteed.</p>
         </Card>
         <Card className="panel">
           <SectionTitle title="Top Holdings" />
@@ -1264,15 +1652,50 @@ function FundDetailPage({ path }) {
           <PieChart data={fund.sectors} />
         </Card>
         <Card className="panel recommendation-panel">
-          <SectionTitle title="Recommendation" />
-          <h2>{portfolioFund ? 'Better than your current variant?' : 'Should you shortlist it?'}</h2>
-          <p>{portfolioFund ? `Direct plan can reduce long-term drag by ${formatInr(analyzed.lifetimeLoss)} before tax and exit-load effects.` : 'This fund is worth comparing if it improves cost without increasing your risk level.'}</p>
+          <SectionTitle title="Explore Options" />
+          <h2>{portfolioFund ? 'How does the lower-cost variant compare?' : 'How does this fund compare?'}</h2>
+          <p>{portfolioFund ? `Direct plan has lower expense by ${formatPercent(Math.max(0, analyzed.currentExpense - analyzed.suggestedExpense))}. Estimated cost impact is ${formatInr(analyzed.lifetimeLoss)} before tax and exit-load effects.` : 'This fund can be compared for cost, benchmark fit, and risk level before any decision.'}</p>
           <div className="button-row">
             {alternatives.map((item) => <Button key={item.id} variant="secondary" onClick={() => navigate(`/fund/${item.id}`)}>{item.fundName}</Button>)}
           </div>
+          <label><span>Compare with another fund</span><select onChange={(event) => event.target.value && navigate(`/fund/${event.target.value}`)} defaultValue=""><option value="">Select fund</option>{fundDataset.filter((item) => item.id !== fund.id).map((item) => <option key={item.id} value={item.id}>{item.fundName}</option>)}</select></label>
         </Card>
       </div>
     </section>
+  );
+}
+
+function BenchmarkComparisonChart({ fund }) {
+  const width = 720;
+  const height = 260;
+  const padding = 34;
+  const fundRates = [fund.oneYearReturn, fund.threeYearReturn, fund.fiveYearReturn];
+  const benchmarkRates = [
+    (fund.benchmarkReturn || fund.fiveYearReturn) * 0.78,
+    (fund.benchmarkReturn || fund.fiveYearReturn) * 0.9,
+    fund.benchmarkReturn || fund.fiveYearReturn
+  ];
+  const points = ['1Y', '3Y', '5Y'].map((label, index) => ({ label, fund: fundRates[index], benchmark: benchmarkRates[index] }));
+  const maxValue = Math.max(...points.flatMap((point) => [point.fund, point.benchmark]));
+  const minValue = Math.min(...points.flatMap((point) => [point.fund, point.benchmark]));
+  const range = Math.max(1, maxValue - minValue);
+  const x = (index) => padding + (index / Math.max(1, points.length - 1)) * (width - padding * 2);
+  const y = (value) => height - padding - ((value - minValue) / range) * (height - padding * 2);
+  const pathFor = (key) => points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index)} ${y(point[key])}`).join(' ');
+
+  return (
+    <div className="chart-wrap">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Fund versus benchmark return chart">
+        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} />
+        <line x1={padding} y1={padding} x2={padding} y2={height - padding} />
+        <path className="chart-primary" d={pathFor('fund')} />
+        <path className="chart-muted" d={pathFor('benchmark')} />
+      </svg>
+      <div className="chart-legend">
+        <span><i className="primary-line" />Fund</span>
+        <span><i className="muted-line" />Benchmark</span>
+      </div>
+    </div>
   );
 }
 

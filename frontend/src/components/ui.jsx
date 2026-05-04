@@ -17,13 +17,16 @@ export function Card({ children, className = '' }) {
   return <article className={`card ${className}`}>{children}</article>;
 }
 
-export function SummaryCard({ label, value, detail, tone = 'neutral', icon: Icon }) {
+export function SummaryCard({ label, value, detail, tone = 'neutral', icon: Icon, tooltip, onClick, children }) {
   return (
-    <Card className={`summary-card ${tone}`}>
+    <Card className={`summary-card ${tone} ${onClick ? 'interactive-summary' : ''}`}>
+      {onClick ? <button className="summary-card-hitbox" onClick={onClick} aria-label={`Open ${label} analysis`} /> : null}
       <div className="summary-icon">{Icon ? <Icon size={18} /> : null}</div>
       <span>{label}</span>
       <strong>{value}</strong>
       <p>{detail}</p>
+      {children}
+      {tooltip ? <div className="summary-tooltip">{tooltip}</div> : null}
     </Card>
   );
 }
@@ -57,10 +60,10 @@ export function PortfolioCard({ fund, onView }) {
         <Metric label="Current value" value={formatInr(fund.currentValue)} />
         <Metric label="Plan" value={fund.currentPlan} />
         <Metric label="Expense" value={formatPercent(fund.currentExpense)} />
-        <Metric label="Hidden loss" value={formatInr(fund.lifetimeLoss)} strong />
+        <Metric label="Cost impact" value={formatInr(fund.lifetimeLoss)} strong />
       </div>
       <div className="portfolio-actions">
-        <span>{fund.recommendation === 'Switch' ? 'Switch candidate' : fund.recommendation === 'Wait' ? 'Review later' : 'No urgent action'}</span>
+        <span>{fund.recommendation === 'Explore' ? 'Cost review area' : fund.recommendation === 'Wait' ? 'Review later' : 'No urgent action'}</span>
         <Button variant="secondary" onClick={onView}>Open <ArrowRight size={16} /></Button>
       </div>
     </Card>
@@ -357,11 +360,12 @@ function CopilotAnswer({ content }) {
   );
 }
 
-export function CopilotPanel({ page, results, selectedFund, userName = 'Aniket' }) {
+export function CopilotPanel({ page, results, selectedFund, userName = 'Aniket', calculatorState }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [panelDraft, setPanelDraft] = useState('');
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState('');
   const [messages, setMessages] = useState([]);
 
   function buildContext() {
@@ -369,7 +373,8 @@ export function CopilotPanel({ page, results, selectedFund, userName = 'Aniket' 
       page,
       results,
       selectedFund,
-      fundUniverse: fundDataset
+      fundUniverse: fundDataset,
+      calculator: calculatorState
     };
   }
 
@@ -395,20 +400,57 @@ export function CopilotPanel({ page, results, selectedFund, userName = 'Aniket' 
 
   async function askCopilot(query, options = {}) {
     try {
-      if (!options.silent) setLoading(true);
+      if (!options.silent) {
+        setLoading(true);
+        setStatus('Thinking...');
+      }
       const response = await fetch(`${API_BASE_URL}/api/copilot/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: query, context: buildContext() })
       });
+
       if (!response.ok) throw new Error('Copilot request failed');
-      const data = await response.json();
-      return normalizeAnswer(data.response);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let finalResponse = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'status') {
+                setStatus(data.status);
+              } else if (data.type === 'final') {
+                finalResponse = data.response;
+              } else if (data.type === 'error') {
+                throw new Error(data.error);
+              }
+            } catch (e) {
+              // Ignore partial JSON chunks
+            }
+          }
+        }
+      }
+
+      if (finalResponse) return normalizeAnswer(finalResponse);
+      throw new Error('No final response received from AI');
     } catch (error) {
       console.warn('Copilot API unavailable, using local fallback:', error);
       return generateCopilotResponse(query, { page, results, selectedFund });
     } finally {
-      if (!options.silent) setLoading(false);
+      if (!options.silent) {
+        setLoading(false);
+        setStatus('');
+      }
     }
   }
 
@@ -476,7 +518,7 @@ export function CopilotPanel({ page, results, selectedFund, userName = 'Aniket' 
           {loading ? (
             <div className="message assistant">
               <div className="copilot-answer">
-                <p className="answer-summary">Checking the page data and fund evidence...</p>
+                <p className="answer-summary">{status || 'Thinking...'}</p>
               </div>
             </div>
           ) : null}

@@ -18,6 +18,7 @@ export function AppStateProvider({ children }) {
   const [guestResults, setGuestResults] = useState(null);
   const [selectedFundId, setSelectedFundId] = useState('hdfc-flexi-cap');
   const [watchlist, setWatchlist] = useState(['nippon-nifty-50', 'kotak-corporate-bond', 'mirae-asset-hybrid']);
+  const [calculatorState, setCalculatorState] = useState(null);
 
   useEffect(() => {
     checkAuth();
@@ -79,7 +80,9 @@ export function AppStateProvider({ children }) {
     setSelectedFundId,
     watchlist,
     setWatchlist,
-    watchedFunds
+    watchedFunds,
+    calculatorState,
+    setCalculatorState
   };
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
