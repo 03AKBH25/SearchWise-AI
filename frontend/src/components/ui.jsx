@@ -188,11 +188,28 @@ function extractJsonObject(text) {
   } catch {
     const start = raw.indexOf('{');
     const end = raw.lastIndexOf('}');
-    if (start === -1 || end <= start) return null;
+    if (start === -1) return null;
+    
+    let slice = raw.slice(start);
+    if (end !== -1 && end > start) {
+      slice = raw.slice(start, end + 1);
+    }
+    
     try {
-      return JSON.parse(raw.slice(start, end + 1));
+      return JSON.parse(slice);
     } catch {
-      return null;
+      // Very basic attempt to close JSON if truncated
+      try {
+        let fixed = slice;
+        const openBraces = (fixed.match(/{/g) || []).length;
+        const closeBraces = (fixed.match(/}/g) || []).length;
+        if (openBraces > closeBraces) {
+          fixed += '}'.repeat(openBraces - closeBraces);
+        }
+        return JSON.parse(fixed);
+      } catch {
+        return null;
+      }
     }
   }
 }
@@ -213,8 +230,24 @@ function normalizeBlock(block) {
     return columns.length && rows.length ? { type: 'table', title: block.title || '', columns, rows } : null;
   }
   if (block.type === 'bullets' || block.type === 'steps') {
-    const items = Array.isArray(block.items) ? block.items.map(String).filter(Boolean) : splitLines(block.text);
+    const items = Array.isArray(block.items) ? block.items.map(String).filter(Boolean) : splitLines(block.text || block.content);
     return items.length ? { type: block.type, title: block.title || '', items } : null;
+  }
+  if (block.type === 'chart') {
+    return {
+      type: 'chart',
+      title: block.title || '',
+      chartType: block.chartType || 'bar',
+      labels: Array.isArray(block.labels) ? block.labels : [],
+      datasets: Array.isArray(block.datasets) ? block.datasets : []
+    };
+  }
+  if (block.type === 'flow') {
+    return {
+      type: 'flow',
+      title: block.title || '',
+      steps: Array.isArray(block.steps) ? block.steps : []
+    };
   }
   if (block.type === 'callout') {
     const text = String(block.text || '').trim();
@@ -235,7 +268,7 @@ function legacyBlocks(answer) {
 function CopilotAnswer({ content }) {
   const blocks = (content.blocks?.length ? content.blocks : legacyBlocks(content)).map(normalizeBlock).filter(Boolean);
   return (
-    <div className="copilot-answer">
+    <div className={`copilot-answer ${content.type || 'answer'}`}>
       {content.title ? <h3>{content.title}</h3> : null}
       {content.summary ? <p className="answer-summary">{content.summary}</p> : null}
       {blocks.map((block, index) => {
@@ -253,6 +286,51 @@ function CopilotAnswer({ content }) {
                   ))}
                 </tbody>
               </table>
+            </div>
+          );
+        }
+        if (block.type === 'chart') {
+          const maxVal = Math.max(1, ...block.datasets.flatMap(ds => ds.data || []));
+          return (
+            <div className="answer-chart" key={index}>
+              {block.title ? <h4>{block.title}</h4> : null}
+              <div className="chart-bars">
+                {block.labels.map((label, i) => (
+                  <div className="chart-group" key={i}>
+                    <div className="bars">
+                      {block.datasets.map((ds, j) => (
+                        <div 
+                          className="bar" 
+                          key={j} 
+                          title={`${ds.label}: ${ds.data[i]}`}
+                          style={{ height: `${(ds.data[i] / maxVal) * 100}%` }}
+                        />
+                      ))}
+                    </div>
+                    <span className="chart-label">{label}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="chart-legend">
+                {block.datasets.map((ds, i) => (
+                  <span key={i}><i className={`color-${i}`} /> {ds.label}</span>
+                ))}
+              </div>
+            </div>
+          );
+        }
+        if (block.type === 'flow') {
+          return (
+            <div className="answer-flow" key={index}>
+              {block.title ? <h4>{block.title}</h4> : null}
+              <div className="flow-steps">
+                {block.steps.map((step, i) => (
+                  <React.Fragment key={i}>
+                    <div className="flow-node">{step}</div>
+                    {i < block.steps.length - 1 && <div className="flow-arrow">→</div>}
+                  </React.Fragment>
+                ))}
+              </div>
             </div>
           );
         }

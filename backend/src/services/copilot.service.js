@@ -1,8 +1,11 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { fundCatalog } from '../data/fundCatalog.js';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const MAX_CONTEXT_CHARS = 24000;
-const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-flash-latest';
 const currency = new Intl.NumberFormat('en-IN', {
   style: 'currency',
   currency: 'INR',
@@ -11,54 +14,66 @@ const currency = new Intl.NumberFormat('en-IN', {
 
 let geminiModel;
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const SYSTEM_INSTRUCTION = `
+ROLE:
+You are "SwitchWise Copilot", a high-end financial intelligence assistant. You are analytical, objective, and precise.
+
+SCOPE & GUARDRAILS:
+1. ONLY answer queries related to:
+   - Personal finance (savings, budgeting, tax planning).
+   - Investments (mutual funds, stocks, fixed deposits, gold).
+   - Economics (inflation, interest rates, market trends).
+   - Financial definitions and educational concepts.
+2. STRICTLY decline non-financial queries (e.g., "how to cook", "write a poem", "sports scores"). 
+   - Response for declines: Use type="refusal", title="Out of Scope", and a polite message that you are a specialized financial AI.
+3. DATA USAGE: 
+   - Use the provided "Evidence context JSON" for any fund-specific analysis.
+   - If a fund mentioned by the user is NOT in the context, use your general knowledge but add a note that the specific data is not in the current portfolio view.
+
+STRICT JSON OUTPUT RULES:
+- Return ONLY valid JSON.
+- No markdown formatting (no \`\`\`json).
+- No pre-amble or post-amble text.
+
+RESPONSE STRUCTURE (JSON Schema):
+{
+  "type": "answer | analysis | comparison | decision | refusal",
+  "title": "Concise, professional title",
+  "summary": "One-sentence executive summary",
+  "blocks": [
+    { "type": "paragraph", "text": "Detailed explanation." },
+    { "type": "bullets", "title": "Optional", "items": ["point 1", "point 2"] },
+    { "type": "steps", "title": "Recommended Path", "items": ["Step 1", "Step 2"] },
+    { "type": "table", "title": "Comparison", "columns": ["Col1", "Col2"], "rows": [["val1", "val2"]] },
+    { "type": "chart", "chartType": "bar | line", "title": "Trend", "labels": ["Jan", "Feb"], "datasets": [{ "label": "Fund A", "data": [10, 15] }] },
+    { "type": "flow", "title": "Process", "steps": ["Input", "Logic", "Output"] },
+    { "type": "callout", "tone": "info | warning | success", "text": "Crucial note." }
+  ]
+}
+
+TONE:
+- Professional, senior financial advisor.
+- Numerate: Use percentages and currency (INR) where appropriate.
+- Direct: Avoid "I hope this helps" or "As an AI".
+`;
+
 function getGeminiModel() {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) return null;
 
   if (!geminiModel) {
-    const genAI = new GoogleGenerativeAI(apiKey);
-
-    geminiModel = genAI.getGenerativeModel({
-      model: MODEL_NAME,
-      systemInstruction: `
-You are SwitchWise Copilot, an evidence-backed mutual fund decision assistant.
-
-SCOPE:
-- You are a senior financial expert. 
-- If the user asks about topics completely unrelated to finance, investment, or mutual funds (e.g., cooking, sports, pop culture), politely inform them that your expertise is limited to financial analysis and suggest they ask about their portfolio or mutual fund concepts.
-
-STRICT RULES:
-- You MUST return ONLY valid JSON.
-- Do NOT add explanations before or after JSON.
-- Do NOT wrap JSON in markdown blocks.
-
-RESPONSE FORMAT (MANDATORY):
-{
-  "type": "answer | analysis | comparison | decision | table",
-  "title": "Short natural title, not a generic label",
-  "summary": "One direct answer in plain language",
-  "blocks": [
-    { "type": "paragraph", "text": "Use for definitions and natural explanations." },
-    { "type": "bullets", "title": "Optional section title", "items": ["Concrete point", "Concrete point"] },
-    { "type": "steps", "title": "Optional section title", "items": ["First step", "Second step"] },
-    { "type": "table", "title": "Optional table title", "columns": ["Fund", "Expense", "Return"], "rows": [["Fund A", "0.18%", "14.7%"]] },
-    { "type": "callout", "tone": "info | warning | success", "text": "Important note." }
-  ]
-}
-
-CONTENT RULES:
-- For analyzing funds, use ONLY the data provided in context. 
-- If the user asks for a definition or general financial concept, use your expert knowledge.
-- Choose the response shape that fits the question. Do not force insight/evidence/action.
-- If the user asks for a table or comparison, return a table block with real columns and rows.
-- If the user asks a simple concept question, answer with a summary and 1-3 explanatory blocks.
-- If the user asks for a portfolio decision, include evidence and steps.
-
-TONE:
-- Senior finance expert: calm, specific, numerate, and practical.
-- No vague disclaimers or filler phrases.
-`
-    });
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      geminiModel = genAI.getGenerativeModel({
+        model: MODEL_NAME,
+        systemInstruction: SYSTEM_INSTRUCTION
+      });
+    } catch (error) {
+      console.error('Failed to initialize Gemini model:', error);
+      return null;
+    }
   }
 
   return geminiModel;
@@ -737,23 +752,36 @@ function fallbackResponse(userMessage = '', context = {}) {
   const priorityFund = priorityFunds[0] || funds[0];
 
   return {
-    insight: priorityFund
-      ? `${priorityFund.fundName || priorityFund.name} is your highest priority fund to review.`
-      : 'Add your portfolio to get insights.',
-
-    evidence: [
-      `Regular funds: ${results.regularCount || 0}`,
-      `Funds needing action: ${results.actionCount || 0}`,
-      `Estimated loss: ${formatInr(results.totalLoss || 0)}`,
-      priorityFund
-        ? `Top priority: ${priorityFund.fundName || priorityFund.name} with ${formatInr(priorityFund.lifetimeLoss || 0)} estimated drag.`
-        : ''
-    ]
-      .filter(Boolean)
-      .join('\n'),
-
-    action:
-      '1. Start with the highest-loss Regular plan.\n2. Compare Direct vs Regular expense and exit load.\n3. Switch only after checking tax impact and whether advice from the distributor is worth the cost.'
+    type: 'analysis',
+    title: priorityFund ? `Review: ${priorityFund.fundName || priorityFund.name}` : 'Portfolio Overview',
+    summary: priorityFund 
+      ? `${priorityFund.fundName || priorityFund.name} is the highest priority for review due to its cost structure.`
+      : 'Your portfolio analysis is ready.',
+    blocks: [
+      {
+        type: 'bullets',
+        title: 'Current Status',
+        items: [
+          `Regular funds identified: ${results.regularCount || 0}`,
+          `Funds needing immediate action: ${results.actionCount || 0}`,
+          `Total estimated lifetime drag: ${formatInr(results.totalLoss || 0)}`
+        ]
+      },
+      priorityFund ? {
+        type: 'callout',
+        tone: 'warning',
+        text: `Priority Fund: ${priorityFund.fundName} has a ${formatInr(priorityFund.lifetimeLoss)} estimated hidden loss.`
+      } : null,
+      {
+        type: 'steps',
+        title: 'Suggested Next Steps',
+        items: [
+          'Open the Action Center to see the full list of Regular-to-Direct opportunities.',
+          'Review the Portfolio tab to check performance versus peers.',
+          'Check the Explore section for low-cost alternatives in the same categories.'
+        ]
+      }
+    ].filter(Boolean)
   };
 }
 
@@ -776,32 +804,64 @@ export async function getCopilotResponse(userMessage = '', context = {}) {
     buildEvidenceContext(context)
   ].join('\n\n');
 
-  try {
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 800,
-        responseMimeType: 'application/json'
-      }
-    });
+  let lastError;
+  const maxRetries = 3;
 
-    return parseJsonResponse(result.response.text(), userMessage, context);
-  } catch (error) {
-    console.error('Copilot error:', error);
-    
-    if (error?.status === 429 || error?.message?.includes('429')) {
-      return {
-        type: 'answer',
-        title: 'Copilot Capacity Reached',
-        summary: 'SwitchWise Copilot is currently at maximum capacity for the free tier.',
-        blocks: [
-          { type: 'paragraph', text: 'You have reached the temporary usage limit of the Gemini API free quota.' },
-          { type: 'steps', title: 'What to do next', items: ['Please wait a moment before trying again.', 'Consider upgrading to SwitchWise Premium for unlimited, high-priority Copilot access.'] }
-        ]
-      };
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 1200,
+          responseMimeType: 'application/json'
+        }
+      });
+
+      return parseJsonResponse(result.response.text(), userMessage, context);
+    } catch (error) {
+      lastError = error;
+      
+      // Retry on 503 (Service Unavailable / High Demand)
+      if (error?.status === 503 || error?.message?.includes('503')) {
+        console.warn(`[Copilot] 503 Service Unavailable (Attempt ${attempt}/${maxRetries}). Retrying...`);
+        if (attempt < maxRetries) {
+          await sleep(1500 * attempt); // 1.5s, 3s backoff
+          continue;
+        }
+      }
+      
+      // If we are not retrying, break the loop
+      break;
     }
-    
-    return normalizeCopilotResponse(fallbackResponse(userMessage, context));
   }
+
+  // If we reach here, handle the error
+  console.error('Copilot final error:', lastError);
+  
+  if (lastError?.status === 429 || lastError?.message?.includes('429')) {
+    return {
+      type: 'answer',
+      title: 'Copilot Capacity Reached',
+      summary: 'SwitchWise Copilot is currently at maximum capacity for the free tier.',
+      blocks: [
+        { type: 'paragraph', text: 'You have reached the temporary usage limit of the Gemini API free quota.' },
+        { type: 'steps', title: 'What to do next', items: ['Please wait a moment before trying again.', 'Consider upgrading to SwitchWise Premium for unlimited, high-priority Copilot access.'] }
+      ]
+    };
+  }
+  
+  if (lastError?.status === 503 || lastError?.message?.includes('503')) {
+    return {
+      type: 'answer',
+      title: 'AI Model Overloaded',
+      summary: 'The underlying AI model is experiencing extremely high demand right now.',
+      blocks: [
+        { type: 'paragraph', text: 'This is a temporary service issue on the provider side. I attempted to reconnect several times but the service remains unavailable.' },
+        { type: 'steps', title: 'Suggested next steps', items: ['Try again in 30-60 seconds.', 'Check your internet connection.', 'If the problem persists, the fallback engine will provide basic portfolio guidance.'] }
+      ]
+    };
+  }
+  
+  return normalizeCopilotResponse(fallbackResponse(userMessage, context));
 }

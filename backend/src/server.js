@@ -87,9 +87,11 @@ app.post('/api/funds/recommend', async (req, res, next) => {
 app.post('/api/copilot/chat', async (req, res, next) => {
   try {
     const { message, context } = req.body;
+    console.log(`[Copilot] Received message: "${message.substring(0, 50)}..."`);
     const response = await getCopilotResponse(message, context);
     res.json({ response });
   } catch (error) {
+    console.error('[Copilot Error]', error);
     next(error);
   }
 });
