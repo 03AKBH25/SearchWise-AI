@@ -5,12 +5,24 @@ import mongoose from 'mongoose';
 import { searchFunds, getFundPair } from './services/amfi.service.js';
 import { buildAdvice, discoverFunds } from './services/advisor.service.js';
 import { getCopilotResponse } from './services/copilot.service.js';
+import passport from 'passport';
+import cookieParser from 'cookie-parser';
+import { configurePassport } from './config/passport.js';
+import authRoutes from './routes/auth.routes.js';
+
 
 const app = express();
 const port = process.env.PORT || 4000;
 
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
+app.use(cors({ 
+  origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+  credentials: true 
+}));
+app.use(cookieParser());
 app.use(express.json({ limit: '1mb' }));
+app.use(passport.initialize());
+
+configurePassport();
 
 let mongoState = 'not_configured';
 
@@ -27,7 +39,10 @@ async function connectMongo() {
   }
 }
 
+app.use('/api/auth', authRoutes);
+
 app.get('/api/health', (_req, res) => {
+
   res.json({
     ok: true,
     mongo: mongoState,

@@ -214,6 +214,11 @@ function isComparisonTableQuery(query) {
   return text.includes('table') || text.includes('tabular') || text.includes('compare') || text.includes('comparison');
 }
 
+function isLossQuery(query) {
+  const text = normalize(query);
+  return text.includes('where') || text.includes('losing') || text.includes('loss') || text.includes('money');
+}
+
 function usableReturn(value) {
   const number = Number(value || 0);
   if (!Number.isFinite(number)) return 0;
@@ -566,6 +571,47 @@ function fallbackResponse(userMessage = '', context = {}) {
   if (isNifty50Query(userMessage)) return nifty50Response();
   if (isLowExpenseQuery(userMessage)) return lowExpenseShortlistResponse(userMessage, context);
 
+  if (mentionedFund && isLossQuery(userMessage)) {
+    const inPortfolio =
+      funds.find((fund) => normalize(fundDisplayName(fund)) === normalize(fundDisplayName(mentionedFund))) ||
+      funds.find((fund) => normalize(fundDisplayName(fund)).includes(normalize(fundDisplayName(mentionedFund)))) ||
+      funds.find((fund) => normalize(fundDisplayName(mentionedFund)).includes(normalize(fundDisplayName(fund)))) ||
+      mentionedFund;
+    const gap = expenseGapFor(inPortfolio);
+    const currentExpense = Number(inPortfolio.currentExpense || inPortfolio.regularExpense || 0);
+    const directExpense = Number(inPortfolio.suggestedExpense || inPortfolio.directExpense || 0);
+    const loss = Number(inPortfolio.lifetimeLoss || 0);
+
+    return {
+      type: 'answer',
+      title: `${fundDisplayName(inPortfolio)} Cost Drag`,
+      summary: loss > 0
+        ? `You are losing an estimated ${formatInr(loss)} in ${fundDisplayName(inPortfolio)} from the Regular-vs-Direct cost gap.`
+        : `${fundDisplayName(inPortfolio)} does not show visible Regular-plan cost drag in the current portfolio context.`,
+      blocks: [
+        {
+          type: 'bullets',
+          title: 'Evidence',
+          items: [
+            `Current plan: ${inPortfolio.currentPlan || 'Not specified'}.`,
+            `Current expense: ${formatPercent(currentExpense)} vs Direct expense: ${formatPercent(directExpense)}.`,
+            `Annual cost gap: ${formatPercent(gap)}.`,
+            `Modeled horizon: ${Number(inPortfolio.years || 0) || 'not specified'} years; invested amount: ${formatInr(inPortfolio.amount || 0)}.`
+          ]
+        },
+        {
+          type: 'steps',
+          title: 'Suggested next steps',
+          items: [
+            'Check exit load and capital-gains tax before switching existing units.',
+            'Move future SIPs to Direct if you do not need distributor-led advice.',
+            'Compare same-category exposure only if you are changing the fund, not just the plan.'
+          ]
+        }
+      ]
+    };
+  }
+
   if (q.includes('summarize') || q.includes('summary') || q.includes('overview')) {
     const totalInvested = Number(results.totalInvested || 0);
     const currentValue = Number(results.currentValue || 0);
@@ -637,7 +683,7 @@ function fallbackResponse(userMessage = '', context = {}) {
     };
   }
 
-  if (q.includes('where') || q.includes('losing') || q.includes('loss') || q.includes('money')) {
+  if (isLossQuery(userMessage)) {
     const top = priorityFunds.slice(0, 3);
     const totalLoss = Number(results.totalLoss || top.reduce((sum, fund) => sum + Number(fund.lifetimeLoss || 0), 0));
 
@@ -716,9 +762,13 @@ function fallbackResponse(userMessage = '', context = {}) {
 export async function getCopilotResponse(userMessage = '', context = {}) {
   const query = String(userMessage || '').toLowerCase();
   const page = String(context.page || '').toLowerCase();
+  const mentionedFund = findMentionedFund(userMessage, context);
   const shouldUseDeterministicLossAnswer =
     (page === 'dashboard' || page === 'portfolio') &&
-    (query.includes('where') || query.includes('losing') || query.includes('loss') || query.includes('money'));
+    isLossQuery(query);
+  const shouldUseDeterministicFundLossAnswer =
+    Boolean(mentionedFund) &&
+    isLossQuery(query);
   const shouldUseDeterministicContextAnswer =
     query.includes('summarize') ||
     query.includes('summary') ||
@@ -727,6 +777,7 @@ export async function getCopilotResponse(userMessage = '', context = {}) {
   const shouldUseDeterministicConceptAnswer = isNifty50Query(userMessage);
 
   if (
+    shouldUseDeterministicFundLossAnswer ||
     shouldUseDeterministicLossAnswer ||
     shouldUseDeterministicContextAnswer ||
     shouldUseDeterministicLowExpenseAnswer ||

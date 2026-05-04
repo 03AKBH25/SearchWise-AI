@@ -49,7 +49,9 @@ import {
   SummaryCard
 } from './components/ui';
 import { analyzeHolding, analyzePortfolio, findFundById, formatInr, formatPercent, generateCopilotResponse, getFundAlternatives } from './utils/analysisEngine';
+import AuthPage from './components/AuthPage';
 import './styles.css';
+
 
 function navigate(path) {
   window.history.pushState({}, '', path);
@@ -88,12 +90,24 @@ function routeName(path) {
 function AppShell() {
   const path = useRoute();
   const [theme, setTheme] = useTheme();
-  const isGuestRoute = ['/portfolio-input', '/processing', '/analysis-preview', '/sample-analysis'].includes(path);
-  const { results, selectedFund } = useAppState();
-  const userName = 'Aniket';
+  const { user, isAuthenticated, isLoading, results, selectedFund } = useAppState();
+  
+  const isGuestRoute = ['/', '/portfolio-input', '/processing', '/analysis-preview', '/sample-analysis', '/login'].includes(path);
+  const userName = user?.name || 'Guest';
 
+  if (isLoading) {
+    return <div className="loading-screen"><div className="analysis-loader"><span></span><span></span><span></span></div></div>;
+  }
+
+  if (path === '/login') return <AuthPage theme={theme} setTheme={setTheme} />;
   if (path === '/') return <LandingPage theme={theme} setTheme={setTheme} />;
   if (isGuestRoute) return <GuestExperience path={path} theme={theme} setTheme={setTheme} />;
+
+  // Protected route check
+  if (!isAuthenticated) {
+    navigate('/login');
+    return null;
+  }
 
   return (
     <div className="app-frame">
@@ -105,6 +119,7 @@ function AppShell() {
     </div>
   );
 }
+
 
 function Navbar({ theme, setTheme, active, userName }) {
   const { results, setSelectedFundId } = useAppState();
@@ -201,13 +216,27 @@ function Navbar({ theme, setTheme, active, userName }) {
       </div>
 
       <div className="nav-actions">
+        <button className="icon-button-clean" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
+          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+        </button>
         <button className="icon-button-clean" title="Notifications">
           <Bell size={20} strokeWidth={1.5} />
         </button>
-        <button className="avatar-button" onClick={() => navigate('/profile')} title="User settings">
-          {userName.charAt(0)}
-        </button>
+        <div className="user-profile-menu">
+          <button className="avatar-button" title={userName}>
+            {userName.charAt(0)}
+          </button>
+          <div className="profile-dropdown">
+            <div className="dropdown-user-info">
+              <strong>{userName}</strong>
+              <span>Pro Member</span>
+            </div>
+            <button onClick={() => navigate('/profile')}>Profile Settings</button>
+            <button onClick={() => useAppState().logout()} className="logout-btn">Logout</button>
+          </div>
+        </div>
       </div>
+
     </header>
   );
 }
@@ -258,13 +287,14 @@ function LandingPage({ theme, setTheme }) {
           <button onClick={() => scrollToSection('explore')}>Explore</button>
           <button onClick={() => scrollToSection('about')}>About</button>
         </nav>
-        <div className="landing-nav-actions">
+          <div className="landing-nav-actions">
           <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle theme">
             {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
           </button>
-          <Button variant="ghost" onClick={() => navigate('/dashboard')}>Sign In</Button>
+          <Button variant="ghost" onClick={() => navigate('/login')}>Sign In</Button>
           <Button onClick={() => navigate('/portfolio-input')}>Get Started</Button>
         </div>
+
       </header>
 
       <section className="landing-hero">
@@ -617,7 +647,8 @@ function ProcessingPage() {
 }
 
 function AnalysisPreviewPage({ mode }) {
-  const { guestResults, guestPortfolio, setGuestPortfolio, setGuestResults, setSelectedFundId } = useAppState();
+  const { isAuthenticated, guestResults, guestPortfolio, setGuestPortfolio, setGuestResults, setSelectedFundId } = useAppState();
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const sampleResults = useMemo(() => analyzePortfolio(samplePortfolio), []);
   const results = mode === 'sample' ? sampleResults : guestResults;
   const portfolio = mode === 'sample' ? samplePortfolio : guestPortfolio;
@@ -642,12 +673,17 @@ function AnalysisPreviewPage({ mode }) {
   const optimizedGain = results.optimizedGain || results.totalLoss;
 
   function openFund(fund) {
+    if (!isAuthenticated) {
+      setShowAuthModal(true);
+      return;
+    }
     setSelectedFundId(fund.baseFundId);
     navigate(`/fund/${fund.baseFundId}`);
   }
 
   return (
     <section className="guest-stack">
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
       <div className="preview-header">
         <PageHeader
           eyebrow={mode === 'sample' ? 'Sample analysis' : 'Analysis preview'}
@@ -707,7 +743,8 @@ function AnalysisPreviewPage({ mode }) {
 
       <div className="portfolio-list">
         {results.funds.map((fund) => (
-          <Card key={fund.id} className="portfolio-card">
+          <Card key={fund.id} className="portfolio-card clickable-card" onClick={() => openFund(fund)}>
+
             <div className="portfolio-main">
               <div>
                 <h3>{fund.fundName}</h3>
@@ -735,35 +772,69 @@ function AnalysisPreviewPage({ mode }) {
           <h2>Want to track and improve your portfolio over time?</h2>
           <p>Create a free account to save this analysis, monitor changes, and unlock extended Copilot questions.</p>
         </div>
-        <Button onClick={() => navigate('/dashboard')}>Create Free Account</Button>
+        <Button onClick={() => navigate('/login')}>Create Free Account</Button>
       </Card>
     </section>
   );
 }
 
+function AuthModal({ isOpen, onClose }) {
+  if (!isOpen) return null;
+  return (
+    <div className="modal-backdrop">
+      <Card className="auth-modal landing-reveal">
+        <div className="modal-close-bar">
+          <button onClick={onClose} className="icon-button-clean">×</button>
+        </div>
+        <div className="modal-header">
+          <div className="modal-icon-ring">
+            <Sparkles size={28} />
+          </div>
+          <h2>Unlock Full Intelligence</h2>
+          <p>You've seen the preview. Create an account to unlock deep fund forensics, track your portfolio health 24/7, and get unlimited AI Copilot insights.</p>
+        </div>
+        <div className="modal-actions">
+          <Button onClick={() => navigate('/login')}>Continue to Create Account <ArrowRight size={18} /></Button>
+          <Button variant="ghost" onClick={onClose}>Stay on Preview</Button>
+        </div>
+        <div className="modal-footer">
+          <span><ShieldCheck size={14} /> Bank-grade security</span>
+          <span><LockKeyhole size={14} /> No transactions</span>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function GuestCopilot({ results, portfolio }) {
+  const { isAuthenticated } = useAppState();
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [questionCount, setQuestionCount] = useState(0);
+  const limit = 2;
   const [draft, setDraft] = useState('');
+
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
       content: {
-        insight: 'I can answer up to 3 guest questions about this preview.',
+        insight: `I can answer up to ${limit} guest questions about this preview.`,
         evidence: `${results.funds.length} funds analyzed with ${formatInr(results.totalLoss)} estimated hidden loss.`,
         action: 'Ask where money is leaking, what to fix first, or whether a fund should be held.'
       }
+
     }
   ]);
   const [showLimit, setShowLimit] = useState(false);
-  const limit = 3;
+
 
   function submit(text = draft) {
     const query = text.trim();
     if (!query) return;
     if (questionCount >= limit) {
-      setShowLimit(true);
+      setShowAuthModal(true);
       return;
     }
+
     const response = generateCopilotResponse(query, { page: 'Portfolio', results, portfolio });
     setMessages((current) => [...current, { role: 'user', text: query }, { role: 'assistant', content: response }]);
     setDraft('');
@@ -772,7 +843,9 @@ function GuestCopilot({ results, portfolio }) {
 
   return (
     <Card className="guest-copilot">
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
       <div className="guest-copilot-head">
+
         <div>
           <span className="eyebrow">Copilot · Guest mode</span>
           <h2>Ask anything about your portfolio</h2>

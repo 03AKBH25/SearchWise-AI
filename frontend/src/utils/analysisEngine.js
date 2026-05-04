@@ -227,6 +227,31 @@ function isComparisonTableQuery(query) {
   return q.includes('table') || q.includes('tabular') || q.includes('compare') || q.includes('comparison');
 }
 
+function isLossQuery(query) {
+  const q = normalize(query);
+  return q.includes('where') || q.includes('losing') || q.includes('loss') || q.includes('money');
+}
+
+function findMentionedPortfolioFund(query, results = {}) {
+  const text = normalize(query);
+  const funds = results?.funds || [];
+  return funds
+    .map((fund) => {
+      const name = normalize(fund.fundName || fund.name);
+      const key = normalize(fund.key || fund.baseFundId || fund.id);
+      const searchable = [name, key].filter(Boolean);
+      const genericWords = ['fund', 'plan', 'growth', 'direct', 'regular', 'scheme'];
+      const tokens = name.split(' ').filter((part) => part.length > 2 && !genericWords.includes(part));
+      const textWords = text.split(/\s+/);
+      const matched =
+        searchable.some((value) => value && (text.includes(value) || value.includes(text))) ||
+        (tokens.length > 0 && tokens.every((token) => textWords.includes(token)));
+      return matched ? { fund, score: Math.max(name.length, key.length) } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score)[0]?.fund || null;
+}
+
 function nifty50Response() {
   return {
     type: 'answer',
@@ -316,9 +341,46 @@ export function generateCopilotResponse(query, context) {
   const { page, results, selectedFund } = context;
   const priorityFund = results?.funds.find((fund) => fund.status === 'Needs Action') || results?.funds[0];
   const loss = formatInr(results?.totalLoss || 0);
+  const mentionedFund = findMentionedPortfolioFund(query, results);
 
   if (isNifty50Query(query)) return nifty50Response();
   if (isLowExpenseQuery(query)) return lowExpenseShortlistResponse(query);
+
+  if (mentionedFund && isLossQuery(query)) {
+    const currentExpense = mentionedFund.currentExpense ?? mentionedFund.regularExpense ?? 0;
+    const suggestedExpense = mentionedFund.suggestedExpense ?? mentionedFund.directExpense ?? 0;
+    const expenseGap = Math.max(0, currentExpense - suggestedExpense);
+    const lifetimeLoss = mentionedFund.lifetimeLoss ?? 0;
+
+    return {
+      type: 'answer',
+      title: `${mentionedFund.fundName} Cost Drag`,
+      summary: lifetimeLoss > 0
+        ? `You are losing an estimated ${formatInr(lifetimeLoss)} in ${mentionedFund.fundName} from the Regular-vs-Direct cost gap.`
+        : `${mentionedFund.fundName} does not show visible Regular-plan cost drag in the current portfolio context.`,
+      blocks: [
+        {
+          type: 'bullets',
+          title: 'Evidence',
+          items: [
+            `Current plan: ${mentionedFund.currentPlan || 'Not specified'}.`,
+            `Current expense: ${formatPercent(currentExpense)} vs Direct expense: ${formatPercent(suggestedExpense)}.`,
+            `Annual cost gap: ${formatPercent(expenseGap)}.`,
+            `Modeled horizon: ${mentionedFund.years || 'not specified'} years; invested amount: ${formatInr(mentionedFund.amount || 0)}.`
+          ]
+        },
+        {
+          type: 'steps',
+          title: 'Suggested next steps',
+          items: [
+            'Check exit load and capital-gains tax before switching existing units.',
+            'Move future SIPs to Direct if you do not need distributor-led advice.',
+            'Compare same-category exposure only if you are changing the fund, not just the plan.'
+          ]
+        }
+      ]
+    };
+  }
 
   if (page === 'Explore' || q.includes('low risk') || q.includes('alternative')) {
     const lowCost = fundDataset.filter((fund) => fund.risk !== 'Very High').sort((a, b) => a.directExpense - b.directExpense)[0];
