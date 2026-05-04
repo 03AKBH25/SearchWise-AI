@@ -18,6 +18,17 @@ const userSchema = new mongoose.Schema({
     type: String,
     select: false
   },
+  onboardingCompleted: {
+    type: Boolean,
+    default: false
+  },
+  preferences: {
+    goal: String,
+    horizon: String,
+    risk: String,
+    experience: String,
+    preference: String
+  },
   avatar: String,
   createdAt: {
     type: Date,

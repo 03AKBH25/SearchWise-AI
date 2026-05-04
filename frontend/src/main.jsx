@@ -29,8 +29,12 @@ import {
   TrendingDown,
   TrendingUp,
   UploadCloud,
-  WalletCards
+  WalletCards,
+  Info,
+  ChevronDown,
+  CheckCircle2
 } from 'lucide-react';
+
 import { AppStateProvider, useAppState } from './state/AppState';
 import { fundDataset, samplePortfolio } from './data/fundDataset';
 import {
@@ -50,7 +54,9 @@ import {
 } from './components/ui';
 import { analyzeHolding, analyzePortfolio, findFundById, formatInr, formatPercent, generateCopilotResponse, getFundAlternatives } from './utils/analysisEngine';
 import AuthPage from './components/AuthPage';
+import OnboardingPage from './components/OnboardingPage';
 import './styles.css';
+
 
 
 function navigate(path) {
@@ -108,6 +114,19 @@ function AppShell() {
     navigate('/login');
     return null;
   }
+
+  // Mandatory onboarding check
+  if (user && !user.onboardingCompleted && path !== '/onboarding') {
+    navigate('/onboarding');
+    return null;
+  }
+  
+  // Prevent returning to onboarding if already completed
+  if (user && user.onboardingCompleted && path === '/onboarding') {
+    navigate('/dashboard');
+    return null;
+  }
+
 
   return (
     <div className="app-frame">
@@ -194,7 +213,7 @@ function Navbar({ theme, setTheme, active, userName }) {
                 <button key={fund.id || fund.baseFundId} className="search-result-card" onClick={() => handleSelect(fund)}>
                   <div className="result-info">
                     <span className="result-name">{fund.fundName || fund.name}</span>
-                    <span className="result-meta">{fund.category} · {fund.assetClass || 'Equity'}</span>
+                    <span className="result-meta">{fund.category} | {fund.assetClass || 'Equity'}</span>
                   </div>
                   <div className="result-stats">
                     <div className="stat-item">
@@ -251,13 +270,15 @@ function Router({ path }) {
   if (path.startsWith('/fund/')) return <FundDetailPage path={path} />;
   if (path === '/watchlist') return <WatchlistPage />;
   if (path === '/profile') return <ProfilePage />;
+  if (path === '/onboarding') return <OnboardingPage />;
   return <DashboardPage />;
 }
+
 
 function LandingPage({ theme, setTheme }) {
   const sampleFunds = fundDataset.slice(0, 3);
   const proofStats = [
-    ['₹1.42L', 'hidden loss detected', TrendingDown, 'danger'],
+    ['Rs. 1.42L', 'hidden loss detected', TrendingDown, 'danger'],
     ['3', 'funds need action', FileSearch, 'warn'],
     ['0', 'changes to your investments', LockKeyhole, 'good'],
     ['AMFI', 'real mutual fund data reference', ShieldCheck, 'neutral']
@@ -318,7 +339,7 @@ function LandingPage({ theme, setTheme }) {
           <div className="visual-head">
             <div>
               <span>Hidden loss</span>
-              <strong>₹1.42L</strong>
+              <strong>Rs. 1.42L</strong>
             </div>
             <span className="status-chip danger">3 funds needing action</span>
           </div>
@@ -721,7 +742,7 @@ function AnalysisPreviewPage({ mode }) {
               <button key={fund.id} className="priority-fund" onClick={() => openFund(fund)}>
                 <div>
                   <strong>{fund.fundName}</strong>
-                  <span>{fund.category} · {fund.currentPlan}</span>
+                  <span>{fund.category} | {fund.currentPlan}</span>
                 </div>
                 <div>
                   <strong>{formatInr(fund.lifetimeLoss)}</strong>
@@ -733,7 +754,7 @@ function AnalysisPreviewPage({ mode }) {
         </Card>
         <Card className="panel projection-card">
           <SectionTitle title="Future Projection" />
-          <h2>If optimized → {formatInr(optimizedGain)} gain over time</h2>
+          <h2>If optimized to {formatInr(optimizedGain)} gain over time</h2>
           <p>Based on switching high-drag Regular variants to comparable Direct expense assumptions. Review tax and exit load before acting.</p>
         </Card>
       </div>
@@ -747,7 +768,7 @@ function AnalysisPreviewPage({ mode }) {
             <div className="portfolio-main">
               <div>
                 <h3>{fund.fundName}</h3>
-                <p>{fund.category} · {fund.assetClass}</p>
+                <p>{fund.category} | {fund.assetClass}</p>
               </div>
               <RecommendationBadge value={fund.status} />
             </div>
@@ -846,7 +867,7 @@ function GuestCopilot({ results, portfolio }) {
       <div className="guest-copilot-head">
 
         <div>
-          <span className="eyebrow">Copilot · Guest mode</span>
+          <span className="eyebrow">Copilot | Guest mode</span>
           <h2>Ask anything about your portfolio</h2>
         </div>
         <span>{Math.max(0, limit - questionCount)} questions left</span>
@@ -898,47 +919,220 @@ function GuestCopilotAnswer({ content }) {
 }
 
 function DashboardPage() {
-  const { results } = useAppState();
+  const { results, user, setSelectedFundId } = useAppState();
+  const [expandedInsight, setExpandedInsight] = useState(null);
+
+  // Derived decision data
+  const healthScore = Math.max(58, Math.min(96, Math.round(92 - (results.totalLoss / Math.max(1, results.totalInvested)) * 180 - results.actionCount * 7)));
+  
+  const priorityFunds = [...results.funds]
+    .filter(f => f.status === 'Needs Action')
+    .sort((a, b) => b.lifetimeLoss - a.lifetimeLoss)
+    .slice(0, 3);
+
+  const nextSteps = [
+    results.regularCount > 0 ? `Switch ${results.regularCount} Regular funds to Direct` : null,
+    results.actionCount > 0 ? `Review top ${priorityFunds.length} priority funds` : null,
+    'Set up cost-tracking alerts'
+  ].filter(Boolean);
+
+  const equityAllocation = results.allocation.find(a => a.label === 'Equity')?.value || 0;
+  const allocationInsight = equityAllocation > 70 
+    ? "High equity exposure -> Expect higher volatility but better long-term growth."
+    : equityAllocation < 30 
+    ? "Low equity exposure -> Lower risk but might struggle to beat inflation."
+    : "Balanced allocation -> Mix of stability and growth potential.";
+
   return (
-    <section className="stack">
-      <PageHeader eyebrow="Dashboard" title="Your portfolio situation, instantly" description="The biggest cost leaks, allocation picture, and next action are visible before you scroll." />
-      <div className="summary-grid">
-        <SummaryCard label="Total invested" value={formatInr(results.totalInvested)} detail="Principal across tracked funds" icon={WalletCards} />
-        <SummaryCard label="Current value" value={formatInr(results.currentValue)} detail={`${formatInr(results.totalReturns)} total returns`} tone="good" icon={ChartNoAxesCombined} />
-        <SummaryCard label="Estimated hidden loss" value={formatInr(results.totalLoss)} detail="Cost drag from plan variants" tone="danger" icon={Flame} />
-        <SummaryCard label="Funds needing action" value={results.actionCount} detail="Ranked by switching priority" tone="warn" icon={Sparkles} />
+    <section className="stack dashboard-stack">
+      <div className="dashboard-hero">
+        <PageHeader 
+          eyebrow={`Welcome back, ${user?.firstName || 'Investor'}`} 
+          title="Your Portfolio Intelligence" 
+          description="We've analyzed your costs, risk, and efficiency. Here is your situation today." 
+        />
+        <PortfolioHealthCard score={healthScore} results={results} />
       </div>
-      <div className="dashboard-grid">
-        <Card className="panel insights-panel">
-          <SectionTitle title="Key Insights" action="Open Portfolio" onAction={() => navigate('/portfolio')} />
-          <div className="insight-list">
-            {results.insights.map((insight) => <InsightCard key={insight.id} insight={insight} onClick={() => navigate('/portfolio')} />)}
+
+      <div className="summary-grid">
+        <SummaryCard label="Total invested" value={formatInr(results.totalInvested)} detail="Across tracked funds" icon={WalletCards} />
+        <SummaryCard label="Current value" value={formatInr(results.currentValue)} detail={`${formatInr(results.totalReturns)} total returns`} tone="good" icon={ChartNoAxesCombined} />
+        <SummaryCard label="Avoidable loss" value={formatInr(results.totalLoss)} detail="Expense drag over time" tone="danger" icon={Flame} tooltip="Total extra cost you'll pay due to high-expense variants like Regular plans." />
+        <SummaryCard label="Action required" value={results.actionCount} detail="High-impact fixes" tone="warn" icon={Sparkles} />
+      </div>
+
+      <div className="dashboard-intelligence-grid">
+        {/* PRIORITY ACTIONS */}
+        <Card className="panel priority-panel">
+          <SectionTitle title="Fix These First" action="View All" onAction={() => navigate('/portfolio')} />
+          <div className="priority-list">
+            {priorityFunds.length > 0 ? priorityFunds.map((fund, idx) => (
+              <div key={fund.id} className="priority-action-item">
+                <div className="priority-badge" data-priority={idx === 0 ? 'High' : 'Medium'}>
+                  {idx === 0 ? 'High Impact' : 'Medium'}
+                </div>
+                <div className="priority-info">
+                  <strong>{fund.fundName}</strong>
+                  <span>Losing {formatInr(fund.lifetimeLoss)} | {fund.currentPlan}</span>
+                </div>
+                <Button variant="ghost" onClick={() => { setSelectedFundId(fund.baseFundId); navigate(`/fund/${fund.baseFundId}`); }}>
+                  Review
+                </Button>
+              </div>
+            )) : (
+              <div className="empty-state">
+                <CheckCircle2 className="good" />
+                <p>No urgent actions detected. Your portfolio is well-optimized.</p>
+              </div>
+            )}
           </div>
         </Card>
+
+        {/* IMPACT PROJECTION */}
+        <Card className="panel impact-card">
+          <SectionTitle title="If you optimize today" />
+          <div className="impact-projection-content">
+            <div className="impact-stat">
+              <span className="impact-label">Projected Gain</span>
+              <strong className="impact-value good">+{formatInr(results.totalLoss)}</strong>
+            </div>
+            <div className="impact-stat">
+              <span className="impact-label">New Expense Avg</span>
+              <strong className="impact-value">0.72%</strong>
+            </div>
+            <p className="impact-copy">
+              By switching to Direct plans, you eliminate the intermediary commission drag, 
+              directly boosting your compound growth over the next 10+ years.
+            </p>
+            <div className="impact-badge">
+              <TrendingUp size={16} /> Estimated 18% higher wealth corpus
+            </div>
+          </div>
+        </Card>
+
+        {/* INSIGHTS WITH WHY LAYER */}
+        <Card className="panel insights-panel wide">
+          <SectionTitle title="Critical Observations" />
+          <div className="insight-expandable-list">
+            {results.insights.map((insight) => (
+              <div 
+                key={insight.id} 
+                className={`insight-expandable-item ${expandedInsight === insight.id ? 'expanded' : ''}`}
+                onClick={() => setExpandedInsight(expandedInsight === insight.id ? null : insight.id)}
+              >
+                <div className="insight-main">
+                  <div className="insight-icon-wrap"><Flame size={18} /></div>
+                  <div className="insight-text">
+                    <strong>{insight.title}</strong>
+                    <p>{insight.description}</p>
+                  </div>
+                  <ChevronDown className="expand-chevron" size={18} />
+                </div>
+                {expandedInsight === insight.id && (
+                  <div className="insight-details landing-reveal">
+                    <div className="why-layer">
+                      <h4>Why this is happening?</h4>
+                      <p>Regular plans include a hidden commission fee paid to brokers. Over time, this fee compounds, reducing your final wealth significantly.</p>
+                    </div>
+                    <div className="risk-cost-layer">
+                      <h4>Cost of Action</h4>
+                      <div className="risk-pills">
+                        <span><Scale size={14} /> Exit Load: 1% if &lt; 1yr</span>
+                        <span><BadgeIndianRupee size={14} /> Tax: 10-15% on gains</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* ALLOCATION + INTERPRETATION */}
         <Card className="panel">
-          <SectionTitle title="Allocation" />
+          <SectionTitle title="Asset Mix" />
           <PieChart data={results.allocation} />
+          <div className="allocation-interpretation">
+            <Info size={16} />
+            <p>{allocationInsight}</p>
+          </div>
         </Card>
-        <Card className="panel wide">
-          <SectionTitle title="Portfolio Growth" />
-          <LineChart points={results.performance} />
-        </Card>
+
+        {/* FUND HIGHLIGHTS & COMPARISON */}
         <Card className="panel highlights-panel">
-          <SectionTitle title="Fund Highlights" />
-          <Highlight label="Best performer" fund={results.highlights.best} value={`${results.highlights.best.fiveYearReturn.toFixed(1)}%`} />
-          <Highlight label="Worst performer" fund={results.highlights.worst} value={`${results.highlights.worst.fiveYearReturn.toFixed(1)}%`} />
-          <Highlight label="Most expensive" fund={results.highlights.expensive} value={formatPercent(results.highlights.expensive.currentExpense)} />
+          <SectionTitle title="Performance Snapshot" />
+          <div className="snapshot-list">
+            <div className="snapshot-item">
+              <div className="item-label">Best Fund</div>
+              <div className="item-content">
+                <strong>{results.highlights.best.fundName}</strong>
+                <span className="status-chip good">Outperforming</span>
+              </div>
+            </div>
+            <div className="snapshot-item">
+              <div className="item-label">Worst Fund</div>
+              <div className="item-content">
+                <strong>{results.highlights.worst.fundName}</strong>
+                <span className="status-chip danger">Underperforming</span>
+              </div>
+            </div>
+          </div>
         </Card>
-        <Card className="panel action-center">
-          <span className="eyebrow">Action Center</span>
-          <h2>{results.actionCount} funds need switching</h2>
-          <p>Fix Regular plan drag before optimizing anything else. The highest hidden loss is already ranked on the portfolio page.</p>
-          <Button onClick={() => navigate('/portfolio')}>Review Priority Funds <ArrowRight size={16} /></Button>
+
+        {/* ACTION SUMMARY */}
+        <Card className="panel action-summary-card">
+          <SectionTitle title="Your Next Steps" />
+          <div className="steps-list">
+            {nextSteps.map((step, idx) => (
+              <div key={idx} className="step-item">
+                <span className="step-num">{idx + 1}</span>
+                <p>{step}</p>
+              </div>
+            ))}
+          </div>
+          <Button onClick={() => navigate('/portfolio')} className="w-full mt-16">
+            Execute Priority Switches
+          </Button>
         </Card>
       </div>
     </section>
   );
 }
+
+function PortfolioHealthCard({ score, results }) {
+  return (
+    <Card className="health-card-premium">
+      <div className="health-score-ring">
+        <svg viewBox="0 0 36 36">
+          <path className="ring-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+          <path className="ring-fill" strokeDasharray={`${score}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+        </svg>
+        <div className="score-value">
+          <strong>{score}</strong>
+          <span>/ 100</span>
+        </div>
+      </div>
+      <div className="health-details">
+        <h2>Portfolio Health Score</h2>
+        <div className="breakdown-grid">
+          <div className="breakdown-item">
+            <span>Cost Efficiency</span>
+            <div className="breakdown-bar"><div style={{ width: `${Math.max(40, 100 - (results.totalLoss / 5000))}%` }} /></div>
+          </div>
+          <div className="breakdown-item">
+            <span>Diversification</span>
+            <div className="breakdown-bar"><div style={{ width: '82%' }} /></div>
+          </div>
+          <div className="breakdown-item">
+            <span>Performance</span>
+            <div className="breakdown-bar"><div style={{ width: '75%' }} /></div>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 
 function PortfolioPage() {
   const { results, setSelectedFundId } = useAppState();

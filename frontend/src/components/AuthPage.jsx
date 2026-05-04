@@ -1,13 +1,24 @@
-import React, { useState } from 'react';
-import { ShieldCheck, LockKeyhole, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { AlertCircle, Loader2, ShieldCheck, LockKeyhole, Sparkles } from 'lucide-react';
 import axios from 'axios';
 import { Button, Card } from './ui';
+import { useAppState } from '../state/AppState';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
+const SUCCESS_MESSAGES = [
+  'Creating your secure account...',
+  'Encrypting your data...',
+  'Setting up your workspace...',
+  'Redirecting to personalization...'
+];
+
 export default function AuthPage() {
+  const { checkAuth } = useAppState();
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [successMsgIdx, setSuccessMsgIdx] = useState(0);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     firstName: '',
@@ -15,6 +26,16 @@ export default function AuthPage() {
     email: '',
     password: ''
   });
+
+  useEffect(() => {
+    let interval;
+    if (isSuccess) {
+      interval = setInterval(() => {
+        setSuccessMsgIdx((prev) => (prev + 1) % SUCCESS_MESSAGES.length);
+      }, 500);
+    }
+    return () => clearInterval(interval);
+  }, [isSuccess]);
 
   function handleGoogleLogin() {
     window.location.href = `${API_URL}/auth/google`;
@@ -27,11 +48,19 @@ export default function AuthPage() {
 
     try {
       const endpoint = isLogin ? '/auth/login' : '/auth/register';
-      await axios.post(`${API_URL}${endpoint}`, formData);
-      window.location.href = '/dashboard';
+      const { data } = await axios.post(`${API_URL}${endpoint}`, formData, { withCredentials: true });
+      
+      setIsSuccess(true);
+      
+      // Wait for the "meaningful messages" to show
+      setTimeout(async () => {
+        await checkAuth();
+        // The router in main.jsx will handle redirection to /onboarding or /dashboard
+        window.location.href = data.user.onboardingCompleted ? '/dashboard' : '/onboarding';
+      }, 2000);
+      
     } catch (err) {
       setError(err.response?.data?.message || 'Something went wrong. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   }
@@ -40,9 +69,22 @@ export default function AuthPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   }
 
+  if (isSuccess) {
+    return (
+      <div className="auth-success-screen">
+        <div className="onboarding-loader-box">
+          <div className="loader-ring">
+            <Loader2 className="animate-spin" size={48} />
+          </div>
+          <h2>{SUCCESS_MESSAGES[successMsgIdx]}</h2>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="auth-page-container">
-      <Card className="auth-card simple-auth">
+      <Card className="auth-card simple-auth landing-reveal">
         <div className="auth-header-minimal">
           <h1>{isLogin ? 'Welcome Back' : 'Create Account'}</h1>
           <p>{isLogin ? 'Sign in to access your portfolio' : 'Join SwitchWise AI to track your investments'}</p>
@@ -127,6 +169,11 @@ export default function AuthPage() {
           ) : (
             <p>Already have an account? <button onClick={() => setIsLogin(true)}>Sign In</button></p>
           )}
+        </div>
+        
+        <div className="auth-trust-minimal">
+          <span><ShieldCheck size={14} /> Bank-grade security</span>
+          <span><LockKeyhole size={14} /> Data protected</span>
         </div>
       </Card>
     </div>

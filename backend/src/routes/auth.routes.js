@@ -3,6 +3,8 @@ import passport from 'passport';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
+import { protect } from '../middleware/auth.middleware.js';
+
 
 
 const router = express.Router();
@@ -67,6 +69,24 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ message: 'Error logging in' });
   }
 });
+
+router.patch('/onboarding', protect, async (req, res) => {
+
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        preferences: req.body.preferences,
+        onboardingCompleted: true
+      },
+      { new: true }
+    );
+    res.json({ user });
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating onboarding' });
+  }
+});
+
 
 router.get(
   '/google',

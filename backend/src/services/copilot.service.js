@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { fundCatalog } from '../data/fundCatalog.js';
 
 const MAX_CONTEXT_CHARS = 24000;
-const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 const currency = new Intl.NumberFormat('en-IN', {
   style: 'currency',
   currency: 'INR',
@@ -763,28 +763,8 @@ export async function getCopilotResponse(userMessage = '', context = {}) {
   const query = String(userMessage || '').toLowerCase();
   const page = String(context.page || '').toLowerCase();
   const mentionedFund = findMentionedFund(userMessage, context);
-  const shouldUseDeterministicLossAnswer =
-    (page === 'dashboard' || page === 'portfolio') &&
-    isLossQuery(query);
-  const shouldUseDeterministicFundLossAnswer =
-    Boolean(mentionedFund) &&
-    isLossQuery(query);
-  const shouldUseDeterministicContextAnswer =
-    query.includes('summarize') ||
-    query.includes('summary') ||
-    query.includes('overview');
-  const shouldUseDeterministicLowExpenseAnswer = isLowExpenseQuery(userMessage);
-  const shouldUseDeterministicConceptAnswer = isNifty50Query(userMessage);
-
-  if (
-    shouldUseDeterministicFundLossAnswer ||
-    shouldUseDeterministicLossAnswer ||
-    shouldUseDeterministicContextAnswer ||
-    shouldUseDeterministicLowExpenseAnswer ||
-    shouldUseDeterministicConceptAnswer
-  ) {
-    return normalizeCopilotResponse(fallbackResponse(userMessage, context));
-  }
+  // Removed aggressive deterministic triggers to allow the AI to handle queries intelligently.
+  // Fallback will now only trigger on API failure or missing configuration.
 
   const model = getGeminiModel();
   if (!model) return normalizeCopilotResponse(fallbackResponse(userMessage, context));
