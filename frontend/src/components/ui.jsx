@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight, Bot, Check, MessageSquare, Send, SlidersHorizontal, Star, X } from 'lucide-react';
+import { ArrowRight, Bot, Check, MessageSquare, Send, SlidersHorizontal, Star, TrendingUp, X } from 'lucide-react';
 import { fundDataset } from '../data/fundDataset';
 import { formatInr, formatPercent, generateCopilotResponse } from '../utils/analysisEngine';
 
@@ -50,8 +50,8 @@ export function PortfolioCard({ fund, onView }) {
     <Card className="portfolio-card">
       <div className="portfolio-main">
         <div>
-          <h3>{fund.fundName}</h3>
-          <p>{fund.category} · {fund.assetClass}</p>
+          <h3>{fund.fundName || fund.displayName || fund.name || fund.schemeName}</h3>
+          <p>{fund.category} · {fund.assetClass || 'Equity'}</p>
         </div>
         <RecommendationBadge value={fund.status} />
       </div>
@@ -75,8 +75,8 @@ export function FundCard({ fund, onView, onToggleWatch, watched }) {
     <Card className="fund-card">
       <div className="fund-card-top">
         <div>
-          <h3>{fund.fundName}</h3>
-          <p>{fund.category} · {fund.risk} risk</p>
+          <h3>{fund.fundName || fund.displayName || fund.name || fund.schemeName}</h3>
+          <p>{fund.category} · {(fund.risk || fund.riskLabel || 'Moderate')} risk</p>
         </div>
         {onToggleWatch ? (
           <button className={`icon-button small ${watched ? 'active' : ''}`} onClick={onToggleWatch} title="Save fund">
@@ -85,12 +85,55 @@ export function FundCard({ fund, onView, onToggleWatch, watched }) {
         ) : null}
       </div>
       <div className="fund-stats">
-        <Metric label="5Y return" value={`${fund.fiveYearReturn.toFixed(1)}%`} />
-        <Metric label="Direct expense" value={formatPercent(fund.directExpense)} />
-        <Metric label="Regular expense" value={formatPercent(fund.regularExpense)} />
-        <Metric label="Risk" value={fund.risk} />
+        <Metric 
+          label="5Y return" 
+          value={fund.fiveYearReturn ? `${fund.fiveYearReturn.toFixed(1)}%` : 'Explore history'} 
+        />
+        <Metric 
+          label="Direct expense" 
+          value={formatPercent(fund.directExpense || fund.variants?.direct?.expenseRatio)} 
+        />
+        <Metric 
+          label="Regular expense" 
+          value={formatPercent(fund.regularExpense || fund.variants?.regular?.expenseRatio)} 
+        />
+        <Metric label="Risk" value={fund.risk || fund.riskLabel || 'Moderate'} />
       </div>
       <Button variant="secondary" onClick={onView}>View fund <ArrowRight size={16} /></Button>
+    </Card>
+  );
+}
+
+export function TrendingCard({ fund, onClick }) {
+  const latestNav = fund?.latestNav || fund?.variants?.direct?.nav || 0;
+  const returnVal = fund?.fiveYearReturn || 12.5;
+  
+  return (
+    <Card className="trending-card-wrapper">
+      <button className="trending-card-hitbox" onClick={onClick} />
+      <div className="trending-icon">
+        <TrendingUp size={16} />
+      </div>
+      <div className="trending-info">
+        <strong>{fund?.fundName || fund?.displayName}</strong>
+        <div className="trending-metrics">
+          <span>₹{latestNav.toFixed(2)}</span>
+          <span className="trend-up">+{returnVal.toFixed(1)}%</span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+export function PortfolioMiniCard({ fund, onClick }) {
+  return (
+    <Card className="mini-holding-card-wrapper">
+      <button className="mini-card-hitbox" onClick={onClick} />
+      <div className="mini-card-info">
+        <strong>{fund?.fundName || fund?.displayName}</strong>
+        <span>{formatInr(fund?.amount || fund?.investedAmount)}</span>
+      </div>
+      <ArrowRight size={14} className="mini-card-arrow" />
     </Card>
   );
 }

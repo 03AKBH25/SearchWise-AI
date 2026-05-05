@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
-import { searchFunds, getFundPair } from './services/amfi.service.js';
+import { searchFunds, getFundPair, getTrendingFunds } from './services/amfi.service.js';
 import { buildAdvice, discoverFunds } from './services/advisor.service.js';
 import { getCopilotResponse } from './services/copilot.service.js';
 import passport from 'passport';
@@ -11,6 +11,7 @@ import session from 'express-session';
 import { configurePassport } from './config/passport.js';
 
 import authRoutes from './routes/auth.routes.js';
+import portfolioRoutes from './routes/portfolio.routes.js';
 
 
 const app = express();
@@ -49,6 +50,7 @@ async function connectMongo() {
 }
 
 app.use('/api/auth', authRoutes);
+app.use('/api/portfolio', portfolioRoutes);
 
 app.get('/api/health', (_req, res) => {
 
@@ -59,9 +61,18 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+app.get('/api/funds/trending', async (req, res, next) => {
+  try {
+    res.json({ funds: await getTrendingFunds() });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/funds/search', async (req, res, next) => {
   try {
-    const funds = await searchFunds(String(req.query.q || ''), Number(req.query.limit || 8));
+    const { q, limit, ...filters } = req.query;
+    const funds = await searchFunds(String(q || ''), filters, Number(limit || 8));
     res.json({ funds });
   } catch (error) {
     next(error);

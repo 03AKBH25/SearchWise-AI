@@ -47,47 +47,67 @@ async function enrichFund(fund) {
   return { ...fund, variants };
 }
 
-export async function searchFunds(query = '', limit = 8) {
+export async function searchFunds(query = '', filters = {}, limit = 8) {
   const term = query.toLowerCase().trim();
+  const { category, risk, expense } = filters;
 
   // Search catalog first
-  const catalogMatches = fundCatalog
-    .filter((fund) => !term || `${fund.displayName} ${fund.category}`.toLowerCase().includes(term));
+  let catalogMatches = fundCatalog
+    .filter((fund) => {
+      const matchesQuery = !term || `${fund.displayName} ${fund.category}`.toLowerCase().includes(term);
+      const matchesCategory = !category || category === 'All' || fund.assetClass === category || fund.category === category;
+      const matchesRisk = !risk || risk === 'All' || fund.riskLabel === risk;
+      const matchesExpense = !expense || fund.variants.direct.expenseRatio <= Number(expense);
+      return matchesQuery && matchesCategory && matchesRisk && matchesExpense;
+    });
 
-  if (catalogMatches.length > 0) {
-    return Promise.all(catalogMatches.slice(0, limit).map(enrichFund));
+  const enrichedCatalog = await Promise.all(catalogMatches.slice(0, limit).map(enrichFund));
+
+  // If we have enough high-quality catalog matches, return them
+  if (enrichedCatalog.length >= limit) {
+    return enrichedCatalog;
   }
 
   // Universal Search via MongoDB
   try {
-    let dbMatches = [];
+    let dbQuery = {};
     if (term) {
-      dbMatches = await Fund.find({ $text: { $search: term } }).limit(limit * 3).lean();
-      if (dbMatches.length === 0) {
-        dbMatches = await Fund.find({ normalized: { $regex: term, $options: 'i' } }).limit(limit * 3).lean();
-      }
-    } else {
-      dbMatches = await Fund.find().limit(limit * 3).lean();
+      dbQuery.$or = [
+        { $text: { $search: term } },
+        { normalized: { $regex: term, $options: 'i' } }
+      ];
     }
+    
+    // In universal search, category/risk/expense are harder to filter in DB because they aren't in the schema
+    // But we can filter by 'variant' or other fields we have
+    
+    let dbMatches = await Fund.find(dbQuery).limit(limit * 5).lean();
 
-    const uniqueFunds = [];
-    const seen = new Set();
+    const uniqueFunds = [...enrichedCatalog];
+    const seen = new Set(enrichedCatalog.map(f => f.displayName.toLowerCase()));
 
     for (const match of dbMatches) {
       const baseName = match.schemeName.replace(/direct plan|regular plan|growth plan|growth|direct|regular|plan/gi, '').trim();
-      if (seen.has(baseName)) continue;
-      seen.add(baseName);
+      const normalizedBase = baseName.toLowerCase();
+      if (seen.has(normalizedBase)) continue;
+      seen.add(normalizedBase);
 
+      // Perform a secondary search for the other variant
       const pairMatches = await Fund.find({ schemeName: { $regex: baseName, $options: 'i' } }).lean();
       const direct = pairMatches.find((p) => p.variant === 'direct');
       const regular = pairMatches.find((p) => p.variant === 'regular');
 
       if (!direct && !regular) continue;
 
+      // Filter by expense if provided
+      const directExpense = 0.6; // Assumption for universal funds
+      if (expense && directExpense > Number(expense)) continue;
+
       const slug = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
       uniqueFunds.push({
         slug,
+        fundName: baseName || match.schemeName,
         displayName: baseName || match.schemeName,
         category: 'Universal Fund',
         benchmark: 'General Index',
@@ -102,7 +122,7 @@ export async function searchFunds(query = '', limit = 8) {
         variants: {
           direct: {
             schemeName: direct?.schemeName || 'Unknown Direct',
-            expenseRatio: 0.6,
+            expenseRatio: directExpense,
             exitLoad: 'Check scheme documents',
             minSip: 500,
             variant: 'direct',
@@ -128,8 +148,17 @@ export async function searchFunds(query = '', limit = 8) {
     return uniqueFunds;
   } catch (error) {
     console.error('Universal search error:', error);
-    return [];
+    return enrichedCatalog;
   }
+}
+
+export async function getTrendingFunds(limit = 6) {
+  // Sort catalog by popularity and return top items
+  const trending = [...fundCatalog]
+    .sort((a, b) => b.popularity - a.popularity)
+    .slice(0, limit);
+    
+  return Promise.all(trending.map(enrichFund));
 }
 
 export async function getFundPair(slugOrQuery) {

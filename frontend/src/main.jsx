@@ -29,11 +29,11 @@ import {
   TrendingDown,
   TrendingUp,
   UploadCloud,
-  WalletCards,
   Info,
   ChevronDown,
   CheckCircle2,
-  Calculator
+  Calculator,
+  Loader2
 } from 'lucide-react';
 
 import { AppStateProvider, useAppState } from './state/AppState';
@@ -51,7 +51,9 @@ import {
   PieChart,
   PortfolioCard,
   RecommendationBadge,
-  SummaryCard
+  SummaryCard,
+  TrendingCard,
+  PortfolioMiniCard
 } from './components/ui';
 import { analyzeHolding, analyzePortfolio, calculateLumpsum, findFundById, formatInr, formatPercent, futureValue, generateCopilotResponse, getFundAlternatives, ratioLabel } from './utils/analysisEngine';
 import AuthPage from './components/AuthPage';
@@ -536,7 +538,7 @@ function GuestExperience({ path, theme, setTheme }) {
 }
 
 function PortfolioInputPage() {
-  const { setGuestPortfolio, setGuestResults } = useAppState();
+  const { setGuestPortfolio, setGuestResults, setPortfolio } = useAppState();
   const [rows, setRows] = useState([
     { id: crypto.randomUUID(), fundId: 'hdfc-flexi-cap', fundName: 'HDFC Flexi Cap Fund', amount: 250000, years: 8, plan: 'Regular' },
     { id: crypto.randomUUID(), fundId: 'parag-parikh-flexi-cap', fundName: 'Parag Parikh Flexi Cap Fund', amount: 180000, years: 5, plan: 'Direct' }
@@ -583,7 +585,9 @@ function PortfolioInputPage() {
       return;
     }
     setError('');
-    setGuestPortfolio(buildPortfolio());
+    const newPortfolio = buildPortfolio();
+    setGuestPortfolio(newPortfolio);
+    setPortfolio(newPortfolio);
     setGuestResults(null);
     navigate('/processing');
   }
@@ -1356,6 +1360,20 @@ function PortfolioPage() {
     navigate(`/fund/${fund.baseFundId}`);
   }
 
+  if (results.funds.length === 0) {
+    return (
+      <section className="stack">
+        <PageHeader eyebrow="Portfolio" title="Manage and improve your funds" description="Your holdings will appear here once you add them." />
+        <div className="portfolio-empty-hero">
+          <img src="/empty_portfolio_illustration.png" alt="No funds" className="empty-hero-img" />
+          <h2>Your portfolio is empty</h2>
+          <p>Add your current mutual fund holdings to get AI-driven insights on costs, risk, and growth.</p>
+          <Button onClick={() => navigate('/explore')}>Add Your First Fund <ArrowRight size={18} /></Button>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="stack">
       <PageHeader eyebrow="Portfolio" title="Manage and improve your funds" description="A decision-first view of every fund, ranked by hidden loss, plan cost, and required action." />
@@ -1382,45 +1400,115 @@ function PortfolioPage() {
 }
 
 function ExplorePage() {
-  const { watchlist, setWatchlist, setSelectedFundId } = useAppState();
+  const { exploreResults = [], isSearching, searchUniverse, setSelectedFundId, trendingFunds = [], portfolio = [] } = useAppState();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const [risk, setRisk] = useState('All');
-  const [expense, setExpense] = useState(1);
-  const funds = fundDataset.filter((fund) => {
-    const matchesQuery = fund.fundName.toLowerCase().includes(query.toLowerCase());
-    const matchesCategory = category === 'All' || fund.assetClass === category || fund.category === category;
-    const matchesRisk = risk === 'All' || fund.risk === risk;
-    return matchesQuery && matchesCategory && matchesRisk && fund.directExpense <= expense;
-  });
+  const [expense, setExpense] = useState(2.5);
+
+  // Debounced API search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const params = {
+        q: query,
+        category: category === 'All' ? undefined : category,
+        risk: risk === 'All' ? undefined : risk,
+        expense: expense
+      };
+      searchUniverse(params);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [query, category, risk, expense]);
 
   function openFund(id) {
+    if (!id) return;
     setSelectedFundId(id);
     navigate(`/fund/${id}`);
   }
 
+  const { watchlist = [], setWatchlist } = useAppState();
+
   function toggleWatch(id) {
-    setWatchlist((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+    setWatchlist((current) => (current || []).includes(id) ? current.filter((item) => item !== id) : [...(current || []), id]);
   }
 
   return (
     <section className="stack">
       <PageHeader eyebrow="Explore" title="Discover funds intelligently" description="Search, filter, and compare funds using cost, category, risk, and portfolio fit." />
+      
+      <div className="explore-top-section">
+        <Card className="trending-section">
+          <div className="section-head">
+            <TrendingUp size={18} className="trend-up" />
+            <h3>Trending Funds</h3>
+          </div>
+          <div className="trending-grid">
+            {(trendingFunds || []).slice(0, 6).map(fund => (
+              <TrendingCard key={fund?.id || fund?.slug || Math.random()} fund={fund} onClick={() => openFund(fund?.id || fund?.slug)} />
+            ))}
+          </div>
+        </Card>
+
+        <Card className="portfolio-preview-box">
+          <div className="section-head">
+            <Landmark size={18} />
+            <h3>Your Portfolio</h3>
+          </div>
+          <div className="portfolio-mini-list">
+            {(portfolio || []).length > 0 ? (
+              portfolio.slice(0, 3).map((fund, idx) => (
+                <PortfolioMiniCard 
+                  key={fund?.id || fund?.fundId || idx} 
+                  fund={fund} 
+                  onClick={() => openFund(fund?.id || fund?.fundId || fund?.baseFundId)} 
+                />
+              ))
+            ) : (
+              <div className="empty-mini-state">
+                <img src="/empty_portfolio_illustration.png" alt="" className="empty-img-small" onError={(e) => e.target.style.display = 'none'} />
+                <p>No funds added yet</p>
+                <Button variant="secondary" onClick={() => document.getElementById('search-input')?.focus()}>Add Now</Button>
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
+
       <Card className="explore-filters">
-        <label><span>Fund name</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by fund name" /></label>
+        <label><span>Fund name</span><input id="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by fund name" /></label>
         <label><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option>All</option><option>Equity</option><option>Debt</option><option>Hybrid</option><option>Flexi Cap</option><option>Index Fund</option></select></label>
         <label><span>Risk level</span><select value={risk} onChange={(event) => setRisk(event.target.value)}><option>All</option><option>Low</option><option>Moderate</option><option>High</option><option>Very High</option></select></label>
-        <label><span>Max expense {expense.toFixed(2)}%</span><input type="range" min="0.2" max="1.8" step="0.05" value={expense} onChange={(event) => setExpense(Number(event.target.value))} /></label>
+        <label><span>Max expense {expense.toFixed(2)}%</span><input type="range" min="0.2" max="2.5" step="0.05" value={expense} onChange={(event) => setExpense(Number(event.target.value))} /></label>
       </Card>
-      <div className="rail-grid">
-        <SuggestionRail title="Trending" funds={[...fundDataset].sort((a, b) => b.popularity - a.popularity).slice(0, 3)} onView={openFund} />
-        <SuggestionRail title="Low-cost funds" funds={[...fundDataset].sort((a, b) => a.directExpense - b.directExpense).slice(0, 3)} onView={openFund} />
-        <SuggestionRail title="Suggested for you" funds={fundDataset.filter((fund) => fund.directExpense < 0.75 && fund.risk !== 'Very High').slice(0, 3)} onView={openFund} />
-      </div>
+
+      {isSearching && (
+        <div className="search-status-bar">
+          <Loader2 className="animate-spin" size={16} /> Searching the universe...
+        </div>
+      )}
+
+      {!isSearching && (exploreResults || []).length === 0 && query && (
+        <Card className="no-results-card">
+          <Search size={32} />
+          <h3>No matching funds found</h3>
+          <p>Try adjusting your filters or searching with different keywords.</p>
+        </Card>
+      )}
+
       <div className="fund-grid">
-        {funds.map((fund) => (
-          <FundCard key={fund.id} fund={fund} onView={() => openFund(fund.id)} watched={watchlist.includes(fund.id)} onToggleWatch={() => toggleWatch(fund.id)} />
-        ))}
+        {(exploreResults || []).map((fund) => {
+          const id = fund?.id || fund?.slug;
+          return (
+            <FundCard 
+              key={id || Math.random()} 
+              fund={fund} 
+              onView={() => openFund(id)} 
+              watched={(watchlist || []).includes(id)} 
+              onToggleWatch={() => toggleWatch(id)} 
+            />
+          );
+        })}
       </div>
     </section>
   );
