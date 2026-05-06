@@ -13,7 +13,9 @@ export function AppStateProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
-  const [portfolio, setPortfolio] = useState(samplePortfolio);
+  const [portfolio, setPortfolio] = useState([]); // Default to empty, will be populated by fetchPortfolio or sample for guests
+  const [hasCheckedPortfolio, setHasCheckedPortfolio] = useState(false);
+  const [validatedResults, setValidatedResults] = useState(null);
   const [guestPortfolio, setGuestPortfolio] = useState([]);
   const [guestResults, setGuestResults] = useState(null);
   const [selectedFundId, setSelectedFundId] = useState('hdfc-flexi-cap');
@@ -27,6 +29,13 @@ export function AppStateProvider({ children }) {
     checkAuth();
     fetchTrending();
   }, []);
+
+  // For guests, show sample portfolio ONLY if not authenticated and loading is finished
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated && portfolio.length === 0) {
+      setPortfolio(samplePortfolio);
+    }
+  }, [isLoading, isAuthenticated, portfolio.length]);
 
   async function fetchTrending() {
     try {
@@ -47,7 +56,7 @@ export function AppStateProvider({ children }) {
       setUser(null);
       setIsAuthenticated(false);
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Ensure loading is false after auth check
     }
   }
 
@@ -56,9 +65,14 @@ export function AppStateProvider({ children }) {
       const { data } = await axios.get(`${API_URL}/portfolio`);
       if (data.holdings && data.holdings.length > 0) {
         setPortfolio(data.holdings);
+      } else {
+        setPortfolio([]);
       }
     } catch (error) {
       console.error('Failed to fetch portfolio', error);
+      setPortfolio([]);
+    } finally {
+      setHasCheckedPortfolio(true);
     }
   }
 
@@ -80,6 +94,19 @@ export function AppStateProvider({ children }) {
       return () => clearTimeout(timer);
     }
   }, [portfolio, isAuthenticated]);
+
+  // Hybrid Approach: Fetch validated results from backend
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await axios.post(`${API_URL}/portfolio/analyze`, { holdings: portfolio });
+        setValidatedResults(data);
+      } catch (error) {
+        console.warn('Backend analysis failed, staying on client estimate', error);
+      }
+    }, 800); // Slight delay after change
+    return () => clearTimeout(timer);
+  }, [portfolio]);
 
   async function logout() {
     try {
@@ -105,7 +132,19 @@ export function AppStateProvider({ children }) {
     }
   }
 
-  const results = useMemo(() => analyzePortfolio(portfolio), [portfolio]);
+  const instantResults = useMemo(() => analyzePortfolio(portfolio), [portfolio]);
+  
+  // Merge instant results with validated data if available
+  const results = useMemo(() => {
+    if (!validatedResults) return { ...instantResults, isValidated: false };
+    
+    // Check if validated results match current portfolio count to avoid stale data during race
+    if (validatedResults.funds.length !== portfolio.length) {
+       return { ...instantResults, isValidated: false };
+    }
+    
+    return { ...validatedResults, isValidated: true };
+  }, [instantResults, validatedResults, portfolio.length]);
   const selectedHolding = useMemo(
     () => results.funds.find((fund) => fund.baseFundId === selectedFundId || fund.id === selectedFundId) || null,
     [results, selectedFundId]

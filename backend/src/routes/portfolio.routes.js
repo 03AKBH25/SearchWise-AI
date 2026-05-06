@@ -2,7 +2,24 @@ import express from 'express';
 import { protect } from '../middleware/auth.middleware.js';
 import { Portfolio } from '../models/Portfolio.js';
 
+import { analyzePortfolio } from '../services/portfolioAnalysis.service.js';
+
 const router = express.Router();
+
+// @desc    Analyze a portfolio (public or private)
+// @route   POST /api/portfolio/analyze
+// @access  Public
+router.post('/analyze', async (req, res) => {
+  try {
+    const { holdings } = req.body;
+    if (!holdings) return res.status(400).json({ message: 'Holdings required' });
+    
+    const results = await analyzePortfolio(holdings);
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({ message: 'Analysis Error', error: error.message });
+  }
+});
 
 // @desc    Get user portfolio
 // @route   GET /api/portfolio

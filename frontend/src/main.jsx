@@ -34,7 +34,8 @@ import {
   ChevronDown,
   CheckCircle2,
   Calculator,
-  Loader2
+  Loader2,
+  X
 } from 'lucide-react';
 
 import { AppStateProvider, useAppState } from './state/AppState';
@@ -60,6 +61,112 @@ import { analyzeHolding, analyzePortfolio, calculateLumpsum, findFundById, forma
 import AuthPage from './components/AuthPage';
 import OnboardingPage from './components/OnboardingPage';
 import './styles.css';
+
+function EmptyState({ title, description, actionText, onAction, image = "/empty_portfolio.png" }) {
+  return (
+    <div className="empty-state-professional landing-reveal">
+      <div className="empty-state-visual">
+        <img src={image} alt="Empty state" className="empty-state-img" />
+        <div className="empty-state-glow" />
+      </div>
+      <div className="empty-state-content">
+        <h2>{title}</h2>
+        <p>{description}</p>
+        <Button onClick={onAction} className="btn-hero-primary">
+          {actionText} <Plus size={18} />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AddFundModal({ fund, onClose, onConfirm }) {
+  const [amount, setAmount] = useState(100000);
+  const [years, setYears] = useState(5);
+  const [plan, setPlan] = useState('Regular');
+
+  if (!fund) return null;
+
+  return (
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <Card className="modal-content add-fund-modal landing-reveal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="modal-title-group">
+            <span className="eyebrow">Add to Portfolio</span>
+            <h2>{fund.fundName || fund.displayName}</h2>
+          </div>
+          <button className="icon-button" onClick={onClose}><X size={20} /></button>
+        </div>
+        
+        <div className="modal-body">
+          <p className="modal-description">Enter your investment details to calculate potential cost savings and long-term growth.</p>
+          
+          <div className="modal-form">
+            <label>
+              <span>Amount Invested (₹)</span>
+              <input 
+                type="number" 
+                value={amount} 
+                onChange={(e) => setAmount(Number(e.target.value))}
+                placeholder="e.g. 100000"
+                autoFocus
+              />
+            </label>
+            
+            <div className="modal-form-row">
+              <label>
+                <span>Years Held</span>
+                <input 
+                  type="number" 
+                  value={years} 
+                  onChange={(e) => setYears(Number(e.target.value))}
+                  placeholder="e.g. 5"
+                />
+              </label>
+              
+              <label>
+                <span>Current Plan</span>
+                <select value={plan} onChange={(e) => setPlan(e.target.value)}>
+                  <option value="Regular">Regular</option>
+                  <option value="Direct">Direct</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          
+          <div className="modal-info-box">
+            <Info size={16} />
+            <p>SwitchWise will compare this against the Direct variant to show you the hidden cost drag.</p>
+          </div>
+        </div>
+        
+        <div className="modal-footer">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => onConfirm({ ...fund, amount, years, plan })}>
+            Add to Portfolio <ArrowRight size={18} />
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function Toast({ message, type = 'success', onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 4000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className={`toast-notification ${type} landing-reveal`}>
+      <div className="toast-content">
+        <CheckCircle2 size={18} />
+        <span>{message}</span>
+      </div>
+      <button className="toast-close" onClick={onClose}><X size={14} /></button>
+    </div>
+  );
+}
 
 
 
@@ -101,7 +208,9 @@ function routeName(path) {
 function AppShell() {
   const path = useRoute();
   const [theme, setTheme] = useTheme();
-  const { user, isAuthenticated, isLoading, results, selectedFund, calculatorState } = useAppState();
+  const { user, isAuthenticated, isLoading, results, selectedFund, calculatorState, portfolio, setPortfolio } = useAppState();
+  const [fundToConfigure, setFundToConfigure] = useState(null);
+  const [toast, setToast] = useState(null);
   
   const isGuestRoute = ['/', '/portfolio-input', '/processing', '/analysis-preview', '/sample-analysis', '/login'].includes(path);
   const userName = user?.name || 'Guest';
@@ -144,8 +253,27 @@ function AppShell() {
         calculatorState={calculatorState}
       />
       <main className="page-shell route-transition" key={path}>
-        <Router path={path} />
+        <Router path={path} onAddFund={setFundToConfigure} />
       </main>
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      <AddFundModal 
+        fund={fundToConfigure} 
+        onClose={() => setFundToConfigure(null)} 
+        onConfirm={(configuredFund) => {
+          const newHolding = {
+            fundId: configuredFund.slug || configuredFund.id || configuredFund.baseFundId,
+            fundName: configuredFund.fundName || configuredFund.displayName,
+            amount: configuredFund.amount,
+            years: configuredFund.years,
+            plan: configuredFund.plan
+          };
+          setPortfolio([...portfolio, newHolding]);
+          setFundToConfigure(null);
+          setToast({ message: `${newHolding.fundName} added to your portfolio!`, type: 'success' });
+        }}
+      />
     </div>
   );
 }
@@ -275,13 +403,13 @@ function Navbar({ theme, setTheme, active, userName }) {
   );
 }
 
-function Router({ path }) {
+function Router({ path, onAddFund }) {
   if (path === '/dashboard') return <DashboardPage />;
   if (path.startsWith('/analysis/')) return <AnalysisDetailPage path={path} />;
-  if (path === '/portfolio') return <PortfolioPage />;
-  if (path === '/explore') return <ExplorePage />;
+  if (path === '/portfolio') return <PortfolioPage onAddFund={onAddFund} />;
+  if (path === '/explore') return <ExplorePage onAddFund={onAddFund} />;
   if (path === '/calculator/lumpsum') return <LumpsumCalculatorPage />;
-  if (path.startsWith('/fund/')) return <FundDetailPage path={path} />;
+  if (path.startsWith('/fund/')) return <FundDetailPage id={path.split('/').at(-1)} onAddFund={onAddFund} />;
   if (path === '/watchlist') return <WatchlistPage />;
   if (path === '/profile') return <ProfilePage />;
   if (path === '/onboarding') return <OnboardingPage />;
@@ -957,26 +1085,42 @@ function DashboardPage() {
 
   return (
     <section className="stack dashboard-stack">
-      <div className="dashboard-hero">
-        <PageHeader 
-          eyebrow={`Welcome back, ${user?.firstName || 'Investor'}`} 
-          title="Your Portfolio Intelligence" 
-          description="We've analyzed your costs, risk, and efficiency. Here is your situation today." 
-        />
-        <PortfolioHealthCard score={healthScore} results={results} />
-      </div>
+      {results.funds.length === 0 ? (
+        <div className="dashboard-empty-wrapper">
+          <PageHeader 
+            eyebrow={`Welcome back, ${user?.firstName || 'Investor'}`} 
+            title="Your Dashboard" 
+            description="Start by adding your mutual funds to see your portfolio intelligence." 
+          />
+          <EmptyState 
+            title="No Investments Detected" 
+            description="Your dashboard is currently empty. Add your mutual fund holdings to unlock AI-driven insights, cost tracking, and risk analysis."
+            actionText="Add Your First Fund"
+            onAction={() => navigate('/explore')}
+          />
+        </div>
+      ) : (
+        <>
+          <div className="dashboard-hero">
+            <PageHeader 
+              eyebrow={`Welcome back, ${user?.firstName || 'Investor'}`} 
+              title="Your Portfolio Intelligence" 
+              description="We've analyzed your costs, risk, and efficiency. Here is your situation today." 
+            />
+            <PortfolioHealthCard score={healthScore} results={results} />
+          </div>
 
-      <div className="summary-grid">
-        <SummaryCard
-          label="Total invested"
-          value={formatInr(results.totalInvested)}
-          detail={`${equityAllocation}% equity allocation`}
-          icon={WalletCards}
-          tooltip="Allocation shows how your portfolio is spread across equity, debt, and hybrid funds. Equity can bring more volatility."
-          onClick={() => navigate('/analysis/allocation')}
-        >
-          <AllocationMiniBar data={results.allocationPercentages} />
-        </SummaryCard>
+          <div className="summary-grid">
+            <SummaryCard
+              label="Total invested"
+              value={formatInr(results.totalInvested)}
+              detail={`${equityAllocation}% equity allocation`}
+              icon={WalletCards}
+              tooltip="Allocation shows how your portfolio is spread across equity, debt, and hybrid funds. Equity can bring more volatility."
+              onClick={() => navigate('/analysis/allocation')}
+            >
+              <AllocationMiniBar data={results.allocationPercentages} />
+            </SummaryCard>
         <SummaryCard
           label="Current value"
           value={formatInr(results.currentValue)}
@@ -1149,6 +1293,8 @@ function DashboardPage() {
           </Button>
         </Card>
       </div>
+      </>
+      )}
     </section>
   );
 }
@@ -1187,7 +1333,14 @@ function PortfolioHealthCard({ score, results }) {
         </div>
       </div>
       <div className="health-details">
-        <h2>Portfolio Health Score</h2>
+        <div className="health-title-row">
+          <h2>Portfolio Health Score</h2>
+          {results.isValidated ? (
+            <span className="validation-badge validated" title="Calculated by backend intelligence"><ShieldCheck size={14} /> Validated</span>
+          ) : (
+            <span className="validation-badge estimating" title="Calculating real-time estimates..."><Loader2 size={12} className="animate-spin" /> Estimating</span>
+          )}
+        </div>
         <div className="breakdown-grid">
           <div className="breakdown-item">
             <span>Cost Efficiency</span>
@@ -1347,7 +1500,7 @@ function AnalysisDetailPage({ path }) {
 }
 
 
-function PortfolioPage() {
+function PortfolioPage({ onAddFund }) {
   const { results, setSelectedFundId } = useAppState();
   const [filter, setFilter] = useState('Needs action');
   const sorted = [...results.funds].sort((a, b) => {
@@ -1364,13 +1517,13 @@ function PortfolioPage() {
   if (results.funds.length === 0) {
     return (
       <section className="stack">
-        <PageHeader eyebrow="Portfolio" title="Manage and improve your funds" description="Your holdings will appear here once you add them." />
-        <div className="portfolio-empty-hero">
-          <img src="/empty_portfolio_illustration.png" alt="No funds" className="empty-hero-img" />
-          <h2>Your portfolio is empty</h2>
-          <p>Add your current mutual fund holdings to get AI-driven insights on costs, risk, and growth.</p>
-          <Button onClick={() => navigate('/explore')}>Add Your First Fund <ArrowRight size={18} /></Button>
-        </div>
+        <PageHeader eyebrow="Portfolio" title="Manage and improve your funds" description="A decision-first view of every fund, ranked by hidden loss, plan cost, and required action." />
+        <EmptyState 
+          title="Start Building Your Portfolio" 
+          description="Once you add your funds, SwitchWise AI will automatically detect high-cost Regular plans, analyze your risk exposure, and suggest optimizations."
+          actionText="Add Funds to Analyze"
+          onAction={() => navigate('/explore')}
+        />
       </section>
     );
   }
@@ -1400,8 +1553,8 @@ function PortfolioPage() {
   );
 }
 
-function ExplorePage() {
-  const { exploreResults = [], isSearching, searchUniverse, setSelectedFundId, trendingFunds = [], portfolio = [] } = useAppState();
+function ExplorePage({ onAddFund }) {
+  const { exploreResults, watchlist, setWatchlist, isSearching, searchUniverse, portfolio, setSelectedFundId, trendingFunds } = useAppState();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const [risk, setRisk] = useState('All');
@@ -1428,7 +1581,6 @@ function ExplorePage() {
     navigate(`/fund/${id}`);
   }
 
-  const { watchlist = [], setWatchlist } = useAppState();
 
   function toggleWatch(id) {
     setWatchlist((current) => (current || []).includes(id) ? current.filter((item) => item !== id) : [...(current || []), id]);
@@ -1507,6 +1659,7 @@ function ExplorePage() {
               onView={() => openFund(id)} 
               watched={(watchlist || []).includes(id)} 
               onToggleWatch={() => toggleWatch(id)} 
+              onAdd={() => onAddFund(fund)}
             />
           );
         })}
@@ -1683,9 +1836,8 @@ function LumpsumDonut({ invested, returns }) {
   );
 }
 
-function FundDetailPage({ path }) {
+function FundDetailPage({ id, onAddFund }) {
   const { results, guestResults, setSelectedFundId } = useAppState();
-  const id = decodeURIComponent(path.replace('/fund/', ''));
   const fund = findFundById(id) || fundDataset[0];
   const activeResults = guestResults || results;
   const portfolioFund = activeResults.funds.find((item) => item.baseFundId === id);
@@ -1698,7 +1850,15 @@ function FundDetailPage({ path }) {
 
   return (
     <section className="stack">
-      <PageHeader eyebrow="Fund Detail" title={fund.fundName} description={`${fund.category} · ${fund.assetClass} · ${fund.risk} risk`} />
+      <PageHeader 
+        eyebrow="Fund Detail" 
+        title={fund.fundName} 
+        description={`${fund.category} · ${fund.assetClass} · ${fund.risk} risk`}
+      >
+        <Button onClick={() => onAddFund(fund)}>
+          Add to Portfolio <Plus size={16} />
+        </Button>
+      </PageHeader>
       <div className="fund-detail-grid">
         <Card className="panel wide">
           <SectionTitle title="Performance vs Benchmark" />
@@ -1745,6 +1905,7 @@ function FundDetailPage({ path }) {
           <h2>{portfolioFund ? 'How does the lower-cost variant compare?' : 'How does this fund compare?'}</h2>
           <p>{portfolioFund ? `Direct plan has lower expense by ${formatPercent(Math.max(0, analyzed.currentExpense - analyzed.suggestedExpense))}. Estimated cost impact is ${formatInr(analyzed.lifetimeLoss)} before tax and exit-load effects.` : 'This fund can be compared for cost, benchmark fit, and risk level before any decision.'}</p>
           <div className="button-row">
+            <Button onClick={() => onAddFund(fund)}>Add to Portfolio <Plus size={16} /></Button>
             {alternatives.map((item) => <Button key={item.id} variant="secondary" onClick={() => navigate(`/fund/${item.id}`)}>{item.fundName}</Button>)}
           </div>
           <label><span>Compare with another fund</span><select onChange={(event) => event.target.value && navigate(`/fund/${event.target.value}`)} defaultValue=""><option value="">Select fund</option>{fundDataset.filter((item) => item.id !== fund.id).map((item) => <option key={item.id} value={item.id}>{item.fundName}</option>)}</select></label>
@@ -1848,12 +2009,15 @@ function ProfilePage() {
   );
 }
 
-function PageHeader({ eyebrow, title, description }) {
+function PageHeader({ eyebrow, title, description, children }) {
   return (
     <div className="page-header">
-      <span className="eyebrow">{eyebrow}</span>
-      <h1>{title}</h1>
-      <p>{description}</p>
+      <div className="page-header-content">
+        <span className="eyebrow">{eyebrow}</span>
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </div>
+      {children && <div className="page-header-actions">{children}</div>}
     </div>
   );
 }

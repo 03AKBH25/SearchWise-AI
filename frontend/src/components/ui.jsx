@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight, Bot, Check, MessageSquare, Send, SlidersHorizontal, Star, TrendingUp, X } from 'lucide-react';
+import { ArrowRight, Bot, Check, MessageSquare, Plus, Send, SlidersHorizontal, Star, TrendingUp, X } from 'lucide-react';
 import { fundDataset } from '../data/fundDataset';
 import { formatInr, formatPercent, generateCopilotResponse } from '../utils/analysisEngine';
 
@@ -70,7 +70,7 @@ export function PortfolioCard({ fund, onView }) {
   );
 }
 
-export function FundCard({ fund, onView, onToggleWatch, watched }) {
+export function FundCard({ fund, onView, onToggleWatch, onAdd, watched }) {
   return (
     <Card className="fund-card">
       <div className="fund-card-top">
@@ -99,7 +99,10 @@ export function FundCard({ fund, onView, onToggleWatch, watched }) {
         />
         <Metric label="Risk" value={fund.risk || fund.riskLabel || 'Moderate'} />
       </div>
-      <Button variant="secondary" onClick={onView}>View fund <ArrowRight size={16} /></Button>
+      <div className="fund-card-actions">
+        <Button variant="secondary" onClick={onView}>View fund <ArrowRight size={16} /></Button>
+        <Button onClick={onAdd} className="btn-add-fund"><Plus size={16} /> Add</Button>
+      </div>
     </Card>
   );
 }

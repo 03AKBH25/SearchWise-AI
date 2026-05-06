@@ -3361,6 +3361,36 @@ th {
   align-items: center;
 }
 
+.health-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.validation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.validation-badge.validated {
+  background: var(--good);
+  color: white;
+}
+
+.validation-badge.estimating {
+  background: var(--surface-3);
+  color: var(--muted);
+}
+
 .health-card-premium {
   display: flex;
   align-items: center;
@@ -4216,4 +4246,268 @@ th {
 .answer-callout.info { background: var(--surface-2); border-left: 4px solid var(--blue); }
 .answer-callout.warning { background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border-left: 4px solid var(--warn); }
 .answer-callout.success { background: color-mix(in srgb, var(--good) 10%, var(--surface)); border-left: 4px solid var(--good); }
+
+
+/* Professional Empty State */
+.empty-state-professional {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4rem 2rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  margin: 2rem 0;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.04);
+}
+
+.empty-state-visual {
+  position: relative;
+  margin-bottom: 2.5rem;
+}
+
+.empty-state-img {
+  width: 280px;
+  height: auto;
+  z-index: 2;
+  position: relative;
+  filter: drop-shadow(0 20px 40px rgba(0,0,0,0.1));
+}
+
+.empty-state-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 200px;
+  height: 200px;
+  background: var(--accent);
+  filter: blur(80px);
+  opacity: 0.15;
+  z-index: 1;
+}
+
+.empty-state-content h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 1rem;
+  letter-spacing: -0.02em;
+}
+
+.empty-state-content p {
+  color: var(--muted);
+  max-width: 480px;
+  margin: 0 auto 2.5rem;
+  line-height: 1.6;
+  font-size: 1.05rem;
+}
+
+.empty-state-professional .btn-hero-primary {
+  padding: 0.875rem 2rem;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 auto;
+}
+
+[data-theme='dark'] .empty-state-img {
+  filter: drop-shadow(0 20px 40px rgba(0,0,0,0.4));
+}
+
+
+/* Modal & Add Fund UI */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal-content {
+  width: 100%;
+  max-width: 540px;
+  background: var(--surface);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--line);
+  padding: 32px;
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.modal-title-group h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.modal-body {
+  display: grid;
+  gap: 24px;
+}
+
+.modal-description {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.modal-form {
+  display: grid;
+  gap: 20px;
+}
+
+.modal-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.modal-form label {
+  display: grid;
+  gap: 8px;
+}
+
+.modal-form span {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.modal-form input,
+.modal-form select {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.modal-info-box {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.modal-info-box svg {
+  color: var(--accent);
+  flex: none;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.btn-add-fund {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800 !important;
+}
+
+.fund-card-actions {
+  display: grid;
+  grid-template-columns: 1fr 0.8fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+
+/* Toast Notification */
+.toast-notification {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 2000;
+  min-width: 320px;
+}
+
+.toast-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.toast-content svg {
+  color: var(--accent);
+}
+
+.toast-content span {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.toast-close:hover {
+  opacity: 1;
+}
+
+/* Updated Page Header */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.page-header-actions {
+  padding-bottom: 4px;
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
 
