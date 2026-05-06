@@ -280,7 +280,7 @@ function AppShell() {
 
 
 function Navbar({ theme, setTheme, active, userName }) {
-  const { results, setSelectedFundId } = useAppState();
+  const { results, setSelectedFundId, logout } = useAppState();
   const [search, setSearch] = useState('');
   const [showResults, setShowResults] = useState(false);
 
@@ -393,7 +393,7 @@ function Navbar({ theme, setTheme, active, userName }) {
               {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />} 
               {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
             </button>
-            <button onClick={() => useAppState().logout()} className="logout-btn">Logout</button>
+            <button onClick={logout} className="logout-btn">Logout</button>
 
           </div>
         </div>
