@@ -101,7 +101,7 @@ export function FundCard({ fund, onView, onToggleWatch, onAdd, watched }) {
       </div>
       <div className="fund-card-actions">
         <Button variant="secondary" onClick={onView}>View fund <ArrowRight size={16} /></Button>
-        <Button onClick={onAdd} className="btn-add-fund"><Plus size={16} /> Add</Button>
+        {onAdd && <Button onClick={onAdd} className="btn-add-fund"><Plus size={16} /> Add</Button>}
       </div>
     </Card>
   );

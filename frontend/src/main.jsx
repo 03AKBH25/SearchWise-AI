@@ -1114,7 +1114,7 @@ function DashboardPage() {
             <SummaryCard
               label="Total invested"
               value={formatInr(results.totalInvested)}
-              detail={`${equityAllocation}% equity allocation`}
+              detail={null}
               icon={WalletCards}
               tooltip="Allocation shows how your portfolio is spread across equity, debt, and hybrid funds. Equity can bring more volatility."
               onClick={() => navigate('/analysis/allocation')}
@@ -1300,11 +1300,20 @@ function DashboardPage() {
 }
 
 function AllocationMiniBar({ data }) {
+  const allocationDetails = useMemo(() => {
+    const top3 = data.filter(a => a.percent > 0).slice(0, 3);
+    const text = top3.map(a => `${a.percent}% ${a.label}`).join(', ');
+    return data.filter(a => a.percent > 0).length > 3 ? `${text}...` : text;
+  }, [data]);
+
   return (
-    <div className="allocation-mini-bar" aria-label="Mini allocation bar">
-      {data.map((item, index) => (
-        <span key={item.label} className={`allocation-slice slice-${index}`} style={{ width: `${Math.max(2, item.percent)}%` }} title={`${item.label}: ${item.percent}%`} />
-      ))}
+    <div className="allocation-mini-bar-group">
+      <div className="allocation-mini-bar" aria-label="Mini allocation bar">
+        {data.map((item, index) => (
+          <span key={item.label} className={`allocation-slice slice-${index}`} style={{ width: `${Math.max(2, item.percent)}%` }} title={`${item.label}: ${item.percent}%`} />
+        ))}
+      </div>
+      <div className="allocation-labels">{allocationDetails}</div>
     </div>
   );
 }
@@ -1554,7 +1563,7 @@ function PortfolioPage({ onAddFund }) {
 }
 
 function ExplorePage({ onAddFund }) {
-  const { exploreResults, watchlist, setWatchlist, isSearching, searchUniverse, portfolio, setSelectedFundId, trendingFunds, user, personalizedRecommendations } = useAppState();
+  const { exploreResults, results, watchlist, setWatchlist, isSearching, searchUniverse, setSelectedFundId, trendingFunds, user, personalizedRecommendations } = useAppState();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const [risk, setRisk] = useState('All');
@@ -1685,7 +1694,7 @@ function ExplorePage({ onAddFund }) {
               onView={() => openFund(id)} 
               watched={(watchlist || []).includes(id)} 
               onToggleWatch={() => toggleWatch(id)} 
-              onAdd={() => onAddFund(fund)}
+              onAdd={results.funds.some(f => f.baseFundId === id) ? null : () => onAddFund(fund)}
             />
           );
         })}
@@ -1881,9 +1890,11 @@ function FundDetailPage({ id, onAddFund }) {
         title={fund.fundName} 
         description={`${fund.category} · ${fund.assetClass} · ${fund.risk} risk`}
       >
-        <Button onClick={() => onAddFund(fund)}>
-          Add to Portfolio <Plus size={16} />
-        </Button>
+        {!portfolioFund && (
+          <Button onClick={() => onAddFund(fund)}>
+            Add to Portfolio <Plus size={16} />
+          </Button>
+        )}
       </PageHeader>
       <div className="fund-detail-grid">
         <Card className="panel wide">
@@ -1931,7 +1942,7 @@ function FundDetailPage({ id, onAddFund }) {
           <h2>{portfolioFund ? 'How does the lower-cost variant compare?' : 'How does this fund compare?'}</h2>
           <p>{portfolioFund ? `Direct plan has lower expense by ${formatPercent(Math.max(0, analyzed.currentExpense - analyzed.suggestedExpense))}. Estimated cost impact is ${formatInr(analyzed.lifetimeLoss)} before tax and exit-load effects.` : 'This fund can be compared for cost, benchmark fit, and risk level before any decision.'}</p>
           <div className="button-row">
-            <Button onClick={() => onAddFund(fund)}>Add to Portfolio <Plus size={16} /></Button>
+            {!portfolioFund && <Button onClick={() => onAddFund(fund)}>Add to Portfolio <Plus size={16} /></Button>}
             {alternatives.map((item) => <Button key={item.id} variant="secondary" onClick={() => navigate(`/fund/${item.id}`)}>{item.fundName}</Button>)}
           </div>
           <label><span>Compare with another fund</span><select onChange={(event) => event.target.value && navigate(`/fund/${event.target.value}`)} defaultValue=""><option value="">Select fund</option>{fundDataset.filter((item) => item.id !== fund.id).map((item) => <option key={item.id} value={item.id}>{item.fundName}</option>)}</select></label>

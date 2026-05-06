@@ -4747,3 +4747,5 @@ th {
   }
 }
 
+
+.allocation-mini-bar-group { display: grid; gap: 10px; margin-top: 4px; } .allocation-mini-bar { box-shadow: 0 0 10px rgba(18, 124, 102, 0.15); animation: bar-glow 3s infinite alternate ease-in-out; } @keyframes bar-glow { from { box-shadow: 0 0 4px rgba(18, 124, 102, 0.1); } to { box-shadow: 0 0 12px rgba(18, 124, 102, 0.25); } } .allocation-labels { font-family: 'Outfit', sans-serif; font-size: 0.78rem; font-weight: 500; color: var(--muted); } .summary-card.interactive-summary:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.15); background: linear-gradient(145deg, var(--surface), color-mix(in srgb, var(--surface-2) 40%, var(--surface))); }
