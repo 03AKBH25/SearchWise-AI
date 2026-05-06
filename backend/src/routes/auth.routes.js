@@ -53,9 +53,13 @@ router.post('/login', async (req, res) => {
     if (!user || !user.password) return res.status(401).json({ message: 'Invalid credentials' });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!isMatch) {
+      console.warn(`[Auth] Failed login attempt for: ${email}`);
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
 
     const token = signToken(user._id);
+    console.log(`[Auth] User logged in: ${email}`);
     res.cookie('jwt', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -117,7 +121,7 @@ router.get('/me', async (req, res) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await import('../models/User.js').then(m => m.default.findById(decoded.id));
+    const user = await User.findById(decoded.id);
     
     if (!user) return res.status(401).json({ message: 'User not found' });
     

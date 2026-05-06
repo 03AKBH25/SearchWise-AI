@@ -29,6 +29,7 @@ import {
   TrendingDown,
   TrendingUp,
   UploadCloud,
+  WalletCards,
   Info,
   ChevronDown,
   CheckCircle2,

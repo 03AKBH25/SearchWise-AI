@@ -40,7 +40,8 @@ async function connectMongo() {
   if (!process.env.MONGODB_URI) return;
   try {
     await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 1500
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 10000,
     });
     mongoState = 'connected';
   } catch (error) {
