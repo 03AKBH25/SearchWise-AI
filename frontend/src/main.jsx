@@ -1613,8 +1613,8 @@ function ExplorePage({ onAddFund }) {
             <div className="section-head">
               <Sparkles size={18} className="text-primary" />
               <div className="head-content">
-                <h3>Matched For Your Profile</h3>
-                <p>Based on your <strong>{user?.preferences?.goal || 'Wealth'}</strong> goal and <strong>{user?.preferences?.risk || 'Moderate'}</strong> risk comfort.</p>
+                <h3>Investors Like You</h3>
+                <p>Funds frequently selected by users with a <strong>{user?.preferences?.goal || 'Wealth'}</strong> goal and <strong>{user?.preferences?.risk || 'Moderate'}</strong> risk profile.</p>
               </div>
             </div>
             <div className="personalized-grid">
@@ -1632,7 +1632,7 @@ function ExplorePage({ onAddFund }) {
                   <div className="match-info">
                     <h4>{candidate.displayName}</h4>
                     <span className="category-tag">{candidate.category}</span>
-                    <p className="match-why"><CheckCircle2 size={12} /> {candidate.why[0]}</p>
+                    <p className="match-why"><CheckCircle2 size={12} /> Alignment: {candidate.why[0]}</p>
                   </div>
                   <ChevronDown className="match-arrow" size={16} />
                 </div>
