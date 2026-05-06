@@ -47,7 +47,7 @@ async function enrichFund(fund) {
   return { ...fund, variants };
 }
 
-export async function searchFunds(query = '', filters = {}, limit = 8) {
+export async function searchFunds(query = '', filters = {}, limit = 9) {
   const term = query.toLowerCase().trim();
   const { category, risk, expense } = filters;
 
@@ -63,12 +63,12 @@ export async function searchFunds(query = '', filters = {}, limit = 8) {
 
   const enrichedCatalog = await Promise.all(catalogMatches.slice(0, limit).map(enrichFund));
 
-  // If we have enough high-quality catalog matches, return them
-  if (enrichedCatalog.length >= limit) {
+  // If we have enough high-quality catalog matches and we are searching for something specific, return them
+  if (term && enrichedCatalog.length >= limit) {
     return enrichedCatalog;
   }
 
-  // Universal Search via MongoDB
+  // Universal Search via MongoDB to fill the gap or for discovery
   try {
     let dbQuery = {};
     if (term) {
@@ -78,16 +78,22 @@ export async function searchFunds(query = '', filters = {}, limit = 8) {
       ];
     }
     
-    // In universal search, category/risk/expense are harder to filter in DB because they aren't in the schema
-    // But we can filter by 'variant' or other fields we have
+    // If no term and no filters, we want to show a broad set of funds
+    // If filters are present but no term, we still want to show matches from DB if possible
     
-    let dbMatches = await Fund.find(dbQuery).limit(limit * 5).lean();
+    // Note: Filtering by category/risk in DB is hard as they aren't in the schema, 
+    // but we can at least get a large sample and filter in JS if needed, 
+    // or just return the latest/popular funds.
+    
+    let dbMatches = await Fund.find(dbQuery).sort({ date: -1 }).limit(limit * 10).lean();
 
     const uniqueFunds = [...enrichedCatalog];
     const seen = new Set(enrichedCatalog.map(f => f.displayName.toLowerCase()));
 
     for (const match of dbMatches) {
       const baseName = match.schemeName.replace(/direct plan|regular plan|growth plan|growth|direct|regular|plan/gi, '').trim();
+      if (!baseName) continue;
+      
       const normalizedBase = baseName.toLowerCase();
       if (seen.has(normalizedBase)) continue;
       seen.add(normalizedBase);
@@ -99,8 +105,8 @@ export async function searchFunds(query = '', filters = {}, limit = 8) {
 
       if (!direct && !regular) continue;
 
-      // Filter by expense if provided
-      const directExpense = 0.6; // Assumption for universal funds
+      // Filter by expense if provided (estimation)
+      const directExpense = 0.6; 
       if (expense && directExpense > Number(expense)) continue;
 
       const slug = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -145,6 +151,10 @@ export async function searchFunds(query = '', filters = {}, limit = 8) {
 
       if (uniqueFunds.length >= limit) break;
     }
+    
+    // Final fallback: if still not enough, add dummy items or more catalog items
+    // (In a real app, we'd have a larger database or catalog)
+    
     return uniqueFunds;
   } catch (error) {
     console.error('Universal search error:', error);

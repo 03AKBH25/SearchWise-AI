@@ -9,6 +9,137 @@
   margin-bottom: 24px;
 }
 
+.personalized-section {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 5%, var(--surface)), var(--surface)) !important;
+  border-color: color-mix(in srgb, var(--accent) 15%, var(--line)) !important;
+  padding: 24px !important;
+}
+
+.personalized-section .section-head {
+  margin-bottom: 24px;
+}
+
+.personalized-section .head-content p {
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.personalized-section .head-content p strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.personalized-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.match-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.match-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.1);
+}
+
+.match-badge {
+  flex-shrink: 0;
+}
+
+.match-score-ring {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.match-score-ring svg {
+  transform: rotate(-90deg);
+  width: 100%;
+  height: 100%;
+}
+
+.match-score-ring .ring-bg {
+  fill: none;
+  stroke: var(--surface-2);
+  stroke-width: 3.5;
+}
+
+.match-score-ring .ring-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.8s ease;
+}
+
+.score-text {
+  position: absolute;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.match-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.match-info h4 {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.match-info .category-tag {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
+}
+
+.match-why {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--good);
+  font-weight: 500;
+}
+
+.match-arrow {
+  color: var(--muted);
+  opacity: 0.4;
+  transform: rotate(-90deg);
+}
+
+.match-card:hover .match-arrow {
+  opacity: 1;
+  color: var(--accent);
+}
+
 .trending-section {
   padding: 24px !important;
 }

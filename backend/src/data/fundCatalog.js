@@ -178,5 +178,149 @@ export const fundCatalog = [
         minSip: 1000
       }
     }
+  },
+  {
+    slug: 'nippon-india-small-cap',
+    displayName: 'Nippon India Small Cap Fund',
+    category: 'Small Cap',
+    benchmark: 'NIFTY Smallcap 250 TRI',
+    assetClass: 'Equity',
+    expectedGrossReturn: 0.142,
+    riskFreeRate: 0.065,
+    standardDeviation: 0.245,
+    trackingError: 0.038,
+    aumCrore: 45600,
+    riskLabel: 'Very High',
+    exposure: {
+      equity: 94.2,
+      debt: 0,
+      cash: 5.8,
+      largeCap: 2,
+      midCap: 15,
+      smallCap: 77,
+      sectors: ['Capital Goods', 'Chemicals', 'Technology']
+    },
+    variants: {
+      direct: {
+        schemeName: 'Nippon India Small Cap Fund - Direct Plan - Growth',
+        expenseRatio: 0.72,
+        exitLoad: '1% if redeemed within 1 month',
+        minSip: 100
+      },
+      regular: {
+        schemeName: 'Nippon India Small Cap Fund - Growth',
+        expenseRatio: 1.62,
+        exitLoad: '1% if redeemed within 1 month',
+        minSip: 100
+      }
+    }
+  },
+  {
+    slug: 'mirae-asset-large-cap',
+    displayName: 'Mirae Asset Large Cap Fund',
+    category: 'Large Cap',
+    benchmark: 'NIFTY 100 TRI',
+    assetClass: 'Equity',
+    expectedGrossReturn: 0.108,
+    riskFreeRate: 0.065,
+    standardDeviation: 0.145,
+    trackingError: 0.019,
+    aumCrore: 35200,
+    riskLabel: 'Very High',
+    exposure: {
+      equity: 98.4,
+      debt: 0,
+      cash: 1.6,
+      largeCap: 85,
+      midCap: 12,
+      smallCap: 1,
+      sectors: ['Financials', 'Energy', 'Technology']
+    },
+    variants: {
+      direct: {
+        schemeName: 'Mirae Asset Large Cap Fund - Direct Plan - Growth',
+        expenseRatio: 0.54,
+        exitLoad: '1% if redeemed within 365 days',
+        minSip: 5000
+      },
+      regular: {
+        schemeName: 'Mirae Asset Large Cap Fund - Regular Plan - Growth',
+        expenseRatio: 1.55,
+        exitLoad: '1% if redeemed within 365 days',
+        minSip: 5000
+      }
+    }
+  },
+  {
+    slug: 'kotak-flexi-cap',
+    displayName: 'Kotak Flexi Cap Fund',
+    category: 'Flexi Cap',
+    benchmark: 'NIFTY 500 TRI',
+    assetClass: 'Equity',
+    expectedGrossReturn: 0.115,
+    riskFreeRate: 0.065,
+    standardDeviation: 0.158,
+    trackingError: 0.023,
+    aumCrore: 38400,
+    riskLabel: 'Very High',
+    exposure: {
+      equity: 97.2,
+      debt: 0,
+      cash: 2.8,
+      largeCap: 68,
+      midCap: 22,
+      smallCap: 7,
+      sectors: ['Financials', 'Automobiles', 'Consumer Staples']
+    },
+    variants: {
+      direct: {
+        schemeName: 'Kotak Flexi Cap Fund - Direct Plan - Growth',
+        expenseRatio: 0.68,
+        exitLoad: '1% if redeemed within 1 year',
+        minSip: 100
+      },
+      regular: {
+        schemeName: 'Kotak Flexi Cap Fund - Growth',
+        expenseRatio: 1.61,
+        exitLoad: '1% if redeemed within 1 year',
+        minSip: 100
+      }
+    }
+  },
+  {
+    slug: 'canara-robeco-bluechip',
+    displayName: 'Canara Robeco Bluechip Equity Fund',
+    category: 'Large Cap',
+    benchmark: 'S&P BSE 100 TRI',
+    assetClass: 'Equity',
+    expectedGrossReturn: 0.102,
+    riskFreeRate: 0.065,
+    standardDeviation: 0.138,
+    trackingError: 0.016,
+    aumCrore: 10200,
+    riskLabel: 'Very High',
+    exposure: {
+      equity: 96.5,
+      debt: 0,
+      cash: 3.5,
+      largeCap: 91,
+      midCap: 5,
+      smallCap: 0,
+      sectors: ['Financials', 'Technology', 'Healthcare']
+    },
+    variants: {
+      direct: {
+        schemeName: 'Canara Robeco Bluechip Equity Fund - Direct Plan - Growth',
+        expenseRatio: 0.38,
+        exitLoad: '1% if redeemed within 1 year',
+        minSip: 1000
+      },
+      regular: {
+        schemeName: 'Canara Robeco Bluechip Equity Fund - Regular Plan - Growth',
+        expenseRatio: 1.68,
+        exitLoad: '1% if redeemed within 1 year',
+        minSip: 1000
+      }
+    }
   }
 ];

@@ -1554,11 +1554,27 @@ function PortfolioPage({ onAddFund }) {
 }
 
 function ExplorePage({ onAddFund }) {
-  const { exploreResults, watchlist, setWatchlist, isSearching, searchUniverse, portfolio, setSelectedFundId, trendingFunds } = useAppState();
+  const { exploreResults, watchlist, setWatchlist, isSearching, searchUniverse, portfolio, setSelectedFundId, trendingFunds, user, personalizedRecommendations } = useAppState();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const [risk, setRisk] = useState('All');
   const [expense, setExpense] = useState(2.5);
+
+  // Pre-set filters based on user profile
+  useEffect(() => {
+    if (user?.preferences) {
+      if (user.preferences.risk && risk === 'All') {
+        const mappedRisk = user.preferences.risk === 'Medium' ? 'Moderate' : user.preferences.risk;
+        setRisk(mappedRisk);
+      }
+      if (user.preferences.preference && category === 'All') {
+         const pref = user.preferences.preference;
+         if (pref.includes('Equity')) setCategory('Equity');
+         else if (pref.includes('Debt')) setCategory('Debt');
+         else if (pref.includes('Index')) setCategory('Index Fund');
+      }
+    }
+  }, [user]);
 
   // Debounced API search
   useEffect(() => {
@@ -1567,7 +1583,8 @@ function ExplorePage({ onAddFund }) {
         q: query,
         category: category === 'All' ? undefined : category,
         risk: risk === 'All' ? undefined : risk,
-        expense: expense
+        expense: expense,
+        limit: 9
       };
       searchUniverse(params);
     }, 300);
@@ -1591,39 +1608,48 @@ function ExplorePage({ onAddFund }) {
       <PageHeader eyebrow="Explore" title="Discover funds intelligently" description="Search, filter, and compare funds using cost, category, risk, and portfolio fit." />
       
       <div className="explore-top-section">
+        {personalizedRecommendations && personalizedRecommendations.candidates?.length > 0 && (
+          <Card className="personalized-section landing-reveal">
+            <div className="section-head">
+              <Sparkles size={18} className="text-primary" />
+              <div className="head-content">
+                <h3>Matched For Your Profile</h3>
+                <p>Based on your <strong>{user?.preferences?.goal || 'Wealth'}</strong> goal and <strong>{user?.preferences?.risk || 'Moderate'}</strong> risk comfort.</p>
+              </div>
+            </div>
+            <div className="personalized-grid">
+              {personalizedRecommendations.candidates.map(candidate => (
+                <div key={candidate.slug} className="match-card" onClick={() => openFund(candidate.slug)}>
+                  <div className="match-badge">
+                    <div className="match-score-ring">
+                      <svg viewBox="0 0 36 36">
+                        <path className="ring-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        <path className="ring-fill" strokeDasharray={`${candidate.fitScore}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                      </svg>
+                      <span className="score-text">{candidate.fitScore}%</span>
+                    </div>
+                  </div>
+                  <div className="match-info">
+                    <h4>{candidate.displayName}</h4>
+                    <span className="category-tag">{candidate.category}</span>
+                    <p className="match-why"><CheckCircle2 size={12} /> {candidate.why[0]}</p>
+                  </div>
+                  <ChevronDown className="match-arrow" size={16} />
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
         <Card className="trending-section">
           <div className="section-head">
             <TrendingUp size={18} className="trend-up" />
-            <h3>Trending Funds</h3>
+            <h3>Trending Now</h3>
           </div>
           <div className="trending-grid">
             {(trendingFunds || []).slice(0, 6).map(fund => (
               <TrendingCard key={fund?.id || fund?.slug || Math.random()} fund={fund} onClick={() => openFund(fund?.id || fund?.slug)} />
             ))}
-          </div>
-        </Card>
-
-        <Card className="portfolio-preview-box">
-          <div className="section-head">
-            <Landmark size={18} />
-            <h3>Your Portfolio</h3>
-          </div>
-          <div className="portfolio-mini-list">
-            {(portfolio || []).length > 0 ? (
-              portfolio.slice(0, 3).map((fund, idx) => (
-                <PortfolioMiniCard 
-                  key={fund?.id || fund?.fundId || idx} 
-                  fund={fund} 
-                  onClick={() => openFund(fund?.id || fund?.fundId || fund?.baseFundId)} 
-                />
-              ))
-            ) : (
-              <div className="empty-mini-state">
-                <img src="/empty_portfolio_illustration.png" alt="" className="empty-img-small" onError={(e) => e.target.style.display = 'none'} />
-                <p>No funds added yet</p>
-                <Button variant="secondary" onClick={() => document.getElementById('search-input')?.focus()}>Add Now</Button>
-              </div>
-            )}
           </div>
         </Card>
       </div>

@@ -21,6 +21,7 @@ export function AppStateProvider({ children }) {
   const [selectedFundId, setSelectedFundId] = useState('hdfc-flexi-cap');
   const [trendingFunds, setTrendingFunds] = useState([]);
   const [exploreResults, setExploreResults] = useState([]);
+  const [personalizedRecommendations, setPersonalizedRecommendations] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [watchlist, setWatchlist] = useState(['nippon-nifty-50', 'kotak-corporate-bond', 'mirae-asset-hybrid']);
   const [calculatorState, setCalculatorState] = useState(null);
@@ -52,11 +53,27 @@ export function AppStateProvider({ children }) {
       setUser(data.user);
       setIsAuthenticated(true);
       fetchPortfolio();
+      fetchPersonalizedRecommendations(data.user);
     } catch (error) {
       setUser(null);
       setIsAuthenticated(false);
     } finally {
       setIsLoading(false); // Ensure loading is false after auth check
+    }
+  }
+
+  async function fetchPersonalizedRecommendations(userData) {
+    if (!userData || !userData.preferences) return;
+    try {
+      const payload = {
+        goalType: userData.preferences.goal,
+        riskComfort: userData.preferences.risk === 'High' ? 4 : userData.preferences.risk === 'Moderate' ? 3 : 2,
+        horizonYears: parseInt(userData.preferences.horizon) || 5
+      };
+      const { data } = await axios.post(`${API_URL}/funds/recommend`, payload);
+      setPersonalizedRecommendations(data);
+    } catch (error) {
+      console.error('Failed to fetch personalized recommendations', error);
     }
   }
 
@@ -179,6 +196,7 @@ export function AppStateProvider({ children }) {
     watchedFunds,
     trendingFunds,
     exploreResults,
+    personalizedRecommendations,
     isSearching,
     searchUniverse,
     calculatorState,
