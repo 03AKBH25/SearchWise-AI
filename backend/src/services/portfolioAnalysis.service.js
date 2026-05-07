@@ -115,7 +115,7 @@ export async function analyzeHolding(holding, index = 0) {
   const units = Number(holding.units || 0);
   
   // Calculate real current value based on units if available, else fallback
-  const currentValue = units > 0 
+  const currentValue = (units > 0 && latestNav > 0)
     ? Math.round(units * latestNav) 
     : Number(holding.currentValue || amount);
 
@@ -214,7 +214,7 @@ export async function analyzePortfolio(portfolio) {
   const latestNavDate = funds
     .map((fund) => fund.navDate)
     .filter(Boolean)
-    .sort()
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
     .at(-1);
     
   const ratios = {

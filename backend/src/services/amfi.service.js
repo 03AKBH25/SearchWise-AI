@@ -272,89 +272,83 @@ export async function getFundPair(slugOrQuery) {
   if (fund) return enrichFund(fund);
 
   try {
-    const dbMatch = await Fund.findOne({ normalized: { $regex: query.replace(/-/g, ' '), $options: 'i' } }).lean();
-    if (dbMatch) {
-      const baseName = dbMatch.schemeName.replace(/direct plan|regular plan|growth plan|growth|direct|regular|plan/gi, '').trim();
-      const pairMatches = await Fund.find({ schemeName: { $regex: baseName, $options: 'i' } }).lean();
+    // Try a broad search if no direct match found
+    const matches = await Fund.find({
+      $or: [
+        { normalized: { $regex: query.replace(/-/g, ' '), $options: 'i' } },
+        { schemeName: { $regex: query.replace(/-/g, ' '), $options: 'i' } }
+      ]
+    }).limit(20).lean();
+
+    if (matches.length > 0) {
+      // Find a base name by stripping Direct/Regular
+      const baseMatch = matches[0];
+      const baseName = baseMatch.schemeName.replace(/direct plan|regular plan|growth plan|growth|direct|regular|plan/gi, '').trim();
       
+      // Find all variants for this fund
+      const pairMatches = await Fund.find({ schemeName: { $regex: baseName, $options: 'i' } }).lean();
       const direct = pairMatches.find((p) => p.variant === 'direct');
       const regular = pairMatches.find((p) => p.variant === 'regular');
 
+      // Determine category and assetClass from name if possible
+      const nameLower = baseName.toLowerCase();
+      let category = 'Universal Fund';
+      let assetClass = 'Mixed';
+      if (nameLower.includes('equity') || nameLower.includes('cap')) { category = 'Equity Fund'; assetClass = 'Equity'; }
+      else if (nameLower.includes('debt') || nameLower.includes('bond')) { category = 'Debt Fund'; assetClass = 'Debt'; }
+      else if (nameLower.includes('hybrid')) { category = 'Hybrid Fund'; assetClass = 'Hybrid'; }
+
       return {
         slug: query,
-        displayName: baseName || dbMatch.schemeName,
-        category: 'Universal Fund',
-        benchmark: 'General Index',
-        assetClass: 'Mixed',
+        displayName: baseName || baseMatch.schemeName,
+        category: baseMatch.category || category,
+        benchmark: baseMatch.benchmark || 'General Index',
+        assetClass: baseMatch.assetClass || assetClass,
         expectedGrossReturn: 0.10,
         riskFreeRate: 0.065,
         standardDeviation: 0.15,
         trackingError: 0.02,
-        aumCrore: 0,
-        riskLabel: 'Moderate',
+        aumCrore: baseMatch.aumCrore || 0,
+        riskLabel: baseMatch.riskLabel || 'Moderate',
         exposure: { equity: 50, debt: 50, cash: 0, largeCap: 50, midCap: 0, smallCap: 0, sectors: [] },
         variants: {
           direct: {
-            schemeName: direct?.schemeName || 'Unknown Direct',
+            schemeName: direct?.schemeName || 'Direct Plan',
             expenseRatio: 0.6,
-            exitLoad: 'Check scheme documents',
+            exitLoad: 'Check documents',
             minSip: 500,
             variant: 'direct',
             nav: direct?.nav || null,
             navDate: direct?.date || null,
-            source: 'AMFI Universal Search'
+            source: 'AMFI Database'
           },
           regular: {
-            schemeName: regular?.schemeName || 'Unknown Regular',
+            schemeName: regular?.schemeName || 'Regular Plan',
             expenseRatio: 1.5,
-            exitLoad: 'Check scheme documents',
+            exitLoad: 'Check documents',
             minSip: 500,
             variant: 'regular',
             nav: regular?.nav || null,
             navDate: regular?.date || null,
-            source: 'AMFI Universal Search'
+            source: 'AMFI Database'
           }
         }
       };
     }
   } catch (error) {
-    console.error('getFundPair Universal error:', error);
+    console.error('getFundPair broad search error:', error);
   }
 
+  const fallbackName = query.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   return {
     slug: query,
-    displayName: query.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
+    displayName: fallbackName,
     category: 'Universal Fund',
     benchmark: 'General Index',
     assetClass: 'Mixed',
-    expectedGrossReturn: 0.1,
-    riskFreeRate: 0.065,
-    standardDeviation: 0.15,
-    trackingError: 0.02,
-    aumCrore: 0,
-    riskLabel: 'Moderate',
-    exposure: { equity: 50, debt: 50, cash: 0, largeCap: 50, midCap: 0, smallCap: 0, sectors: [] },
     variants: {
-      direct: {
-        schemeName: 'Unknown Direct',
-        expenseRatio: 0.6,
-        exitLoad: 'Check documents',
-        minSip: 500,
-        variant: 'direct',
-        nav: null,
-        navDate: null,
-        source: 'Not Found Fallback'
-      },
-      regular: {
-        schemeName: 'Unknown Regular',
-        expenseRatio: 1.5,
-        exitLoad: 'Check documents',
-        minSip: 500,
-        variant: 'regular',
-        nav: null,
-        navDate: null,
-        source: 'Not Found Fallback'
-      }
+      direct: { schemeName: `${fallbackName} - Direct Plan`, expenseRatio: 0.6, nav: null, navDate: null, source: 'Not Found' },
+      regular: { schemeName: `${fallbackName} - Regular Plan`, expenseRatio: 1.5, nav: null, navDate: null, source: 'Not Found' }
     }
   };
 }

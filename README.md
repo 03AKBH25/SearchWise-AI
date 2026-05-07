@@ -1,50 +1,76 @@
-# SwitchWise AI
+# Setup Guide: Running SwitchWise AI on a New Machine
 
-A working prototype for an Indian mutual fund decision co-pilot. It reviews an existing holding, compares Regular vs Direct variants, recommends new Direct-plan fund candidates, and explains tradeoffs through an in-product co-pilot chat.
+Follow these steps to get the project up and running after cloning.
 
-## What It Does
+## Prerequisites
+- **Node.js** (v18 or higher recommended)
+- **MongoDB** (Ensure a local instance is running or have a remote connection string)
+- **Git**
 
-- Captures investor goal, horizon, current fund, plan type, current value, monthly investment and risk comfort.
-- Searches a curated mutual fund catalog with Direct and Regular variants.
-- Fetches NAV from the public AMFI NAV feed when reachable.
-- Suggests new fund candidates ranked by goal fit, risk comfort, horizon and Direct-plan cost.
-- Uses prototype factsheet-style metadata for expense ratio, exposure, risk and tracking-error inputs.
-- Models long-term Regular-to-Direct switch savings and risk-adjusted return deltas.
-- Provides a local co-pilot chat for "why this?", "suggest new funds", tax/exit-load checks and risk explanation.
-- Presents a product-ready React UI with light and dark themes.
-- Exposes an Express API with optional MongoDB snapshot persistence.
+---
 
-## API Surface
+## 1. Project Structure
+The repository is split into two main parts:
+- `/backend`: Node.js/Express API with MongoDB
+- `/frontend`: React application using Vite
 
-- `GET /api/funds/search?q=hdfc`
-- `POST /api/funds/recommend`
-- `POST /api/advice`
-- `POST /api/copilot/chat`
+---
 
-## Run Locally
+## 2. Backend Setup
 
-```bash
-npm install
-npm install --prefix backend
-npm install --prefix frontend
-npm run dev
-```
+1. **Navigate to the backend directory**:
+   ```bash
+   cd backend
+   ```
 
-Frontend: http://localhost:5173  
-Backend: http://localhost:4000
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-## Environment
+3. **Configure Environment Variables**:
+   - Create a `.env` file in the `backend` folder.
+   - Copy the contents from `.env.template` into `.env`.
+   - Update the values if necessary (especially `MONGODB_URI` and `JWT_SECRET`).
 
-Copy `backend/.env.example` to `backend/.env` if you want to configure MongoDB.
+4. **Start the backend server**:
+   ```bash
+   npm run dev
+   ```
+   The server will start on `http://localhost:4000`.
 
-```bash
-PORT=4000
-MONGODB_URI=mongodb://127.0.0.1:27017/switchwise
-AMFI_NAV_URL=https://www.amfiindia.com/spages/NAVAll.txt
-```
+---
 
-MongoDB is optional for the prototype. If it is unavailable, the API continues in public-data mode.
+## 3. Frontend Setup
 
-## Prototype Boundary
+1. **Navigate to the frontend directory**:
+   ```bash
+   cd ../frontend
+   ```
 
-This is an investor decision-support prototype, not personalized financial advice. NAV can be fetched from AMFI, while expense ratios, exposure, risk and tracking-error values are included as prototype metadata that should be replaced with production-grade factsheet ingestion before real investor use.
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+3. **Start the development server**:
+   ```bash
+   npm run dev
+   ```
+   The application will be available at `http://localhost:5173` (or the port shown in your terminal).
+
+---
+
+## 4. Initial Data (Optional but Recommended)
+If the database is empty, you may want to ingest the fund data to see real NAVs and metrics:
+1. In the `backend` directory, run the ingestion script:
+   ```bash
+   node src/scripts/ingestAmfi.js
+   ```
+
+---
+
+## Troubleshooting
+- **CORS Issues**: Ensure `CLIENT_ORIGIN` in the backend `.env` matches your frontend URL.
+- **DB Connection**: Verify that MongoDB is running and the `MONGODB_URI` is correct.
+- **Missing NAVs**: If portfolio values show 0, ensure you have run the AMFI ingestion script.

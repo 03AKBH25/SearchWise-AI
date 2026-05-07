@@ -1003,7 +1003,13 @@ function AnalysisPreviewPage({ mode }) {
 
       <div className="summary-grid">
         <SummaryCard label="Total invested" value={formatInr(results.totalInvested)} detail="Across entered holdings" icon={WalletCards} />
-        <SummaryCard label="Current value" value={formatInr(results.currentValue)} detail="Estimated from your inputs" tone="good" icon={ChartNoAxesCombined} />
+        <SummaryCard 
+          label="Current value" 
+          value={formatInr(results.currentValue)} 
+          detail={`Based on latest NAV${results.latestNavDate ? ` (${results.latestNavDate})` : ''}`} 
+          tone={results.totalReturns >= 0 ? 'good' : 'danger'} 
+          icon={ChartNoAxesCombined} 
+        />
         <SummaryCard label="Hidden loss" value={formatInr(results.totalLoss)} detail="Potential expense drag over time" tone={results.totalLoss ? 'danger' : 'good'} icon={Flame} />
         <SummaryCard label="Funds needing action" value={results.actionCount} detail="Ranked by priority" tone={results.actionCount ? 'warn' : 'good'} icon={Sparkles} />
       </div>
@@ -1279,13 +1285,13 @@ function DashboardPage() {
               tooltip="Allocation shows how your portfolio is spread across equity, debt, and hybrid funds. Equity can bring more volatility."
               onClick={() => navigate('/analysis/allocation')}
             >
-              <AllocationMiniBar data={results.allocationPercentages} />
+              <AllocationMiniBar data={results.categoryDistribution} />
             </SummaryCard>
             <SummaryCard
               label="Current value"
               value={formatInr(results.currentValue)}
               detail={`Based on latest NAV${results.latestNavDate ? ` (${results.latestNavDate})` : ''}`}
-              tone="good"
+              tone={results.totalReturns >= 0 ? 'good' : 'danger'}
               icon={ChartNoAxesCombined}
               tooltip="NAV is the per-unit value published by the fund. Portfolio value changes when NAV changes."
               onClick={() => navigate('/analysis/value')}
@@ -1462,9 +1468,10 @@ function DashboardPage() {
 
 function AllocationMiniBar({ data }) {
   const allocationDetails = useMemo(() => {
-    const top3 = data.filter(a => a.percent > 0).slice(0, 3);
-    const text = top3.map(a => `${a.percent}% ${a.label}`).join(', ');
-    return data.filter(a => a.percent > 0).length > 3 ? `${text}...` : text;
+    const active = data.filter(a => a.percent > 0).sort((a, b) => b.percent - a.percent);
+    const top = active.slice(0, 5);
+    const text = top.map(a => `${a.percent}% ${a.label}`).join(', ');
+    return active.length > 5 ? `${text}...` : text;
   }, [data]);
 
   return (
