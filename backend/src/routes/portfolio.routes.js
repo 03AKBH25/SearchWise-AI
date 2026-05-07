@@ -15,7 +15,7 @@ router.post('/analyze', async (req, res) => {
   try {
     const { holdings } = req.body;
     if (!holdings) return res.status(400).json({ message: 'Holdings required' });
-    
+
     const results = await analyzePortfolio(holdings);
     res.json(results);
   } catch (error) {
@@ -64,16 +64,21 @@ router.post('/sync', protect, async (req, res) => {
       if ((!h.units || h.units === 0) && h.amount) {
         try {
           const fundData = await getFundPair(h.fundId || h.fundName);
-          const variants = Array.isArray(fundData.variants) 
-            ? fundData.variants 
+          const variants = Array.isArray(fundData.variants)
+            ? fundData.variants
             : Object.values(fundData.variants || {});
-            
+
           const plan = (h.plan || 'Regular').toLowerCase();
           const variant = variants.find(v => v.variant === plan) || variants[0];
-          
+
           const nav = variant?.nav || 0;
           if (nav > 0) {
             h.units = h.amount / nav;
+          }
+          
+          // Ensure we don't accidentally rename the fund to "Universal Fund" during sync
+          if (!h.fundName && fundData.displayName !== 'Universal Fund') {
+            h.fundName = fundData.displayName;
           }
         } catch (err) {
           console.warn(`Could not calculate units for ${h.fundName}:`, err.message);

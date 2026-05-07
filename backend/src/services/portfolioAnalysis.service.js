@@ -81,7 +81,7 @@ export async function analyzeHolding(holding, index = 0) {
 
   const fund = {
     id: fundData.slug,
-    fundName: fundData.displayName,
+    fundName: (fundData.displayName === 'Universal Fund' || fundData.category === 'Universal Fund') ? (holding.fundName || fundData.displayName) : fundData.displayName,
     category: fundData.category,
     assetClass: fundData.assetClass || (fundData.category === 'Debt' ? 'Debt' : fundData.category === 'Hybrid' ? 'Hybrid' : 'Equity'),
     risk: fundData.riskLabel,
@@ -131,6 +131,7 @@ export async function analyzeHolding(holding, index = 0) {
     ...fund,
     id: `${fund.id}-${index}`,
     baseFundId: fund.id,
+    holdingId: holding.fundId || fund.id,
     inputName: holding.fundName,
     amount,
     units,

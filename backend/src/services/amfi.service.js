@@ -321,5 +321,40 @@ export async function getFundPair(slugOrQuery) {
     console.error('getFundPair Universal error:', error);
   }
 
-  return enrichFund(fundCatalog[0]);
+  return {
+    slug: query,
+    displayName: query.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
+    category: 'Universal Fund',
+    benchmark: 'General Index',
+    assetClass: 'Mixed',
+    expectedGrossReturn: 0.1,
+    riskFreeRate: 0.065,
+    standardDeviation: 0.15,
+    trackingError: 0.02,
+    aumCrore: 0,
+    riskLabel: 'Moderate',
+    exposure: { equity: 50, debt: 50, cash: 0, largeCap: 50, midCap: 0, smallCap: 0, sectors: [] },
+    variants: {
+      direct: {
+        schemeName: 'Unknown Direct',
+        expenseRatio: 0.6,
+        exitLoad: 'Check documents',
+        minSip: 500,
+        variant: 'direct',
+        nav: null,
+        navDate: null,
+        source: 'Not Found Fallback'
+      },
+      regular: {
+        schemeName: 'Unknown Regular',
+        expenseRatio: 1.5,
+        exitLoad: 'Check documents',
+        minSip: 500,
+        variant: 'regular',
+        nav: null,
+        navDate: null,
+        source: 'Not Found Fallback'
+      }
+    }
+  };
 }

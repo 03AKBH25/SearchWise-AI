@@ -12,7 +12,7 @@ export function AppStateProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   const [portfolio, setPortfolio] = useState([]); // Default to empty, will be populated by fetchPortfolio or sample for guests
   const [hasCheckedPortfolio, setHasCheckedPortfolio] = useState(false);
   const [validatedResults, setValidatedResults] = useState(null);
@@ -25,6 +25,7 @@ export function AppStateProvider({ children }) {
   const [aiInsights, setAiInsights] = useState([]);
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [watchlist, setWatchlist] = useState(['nippon-nifty-50', 'kotak-corporate-bond', 'mirae-asset-hybrid']);
   const [calculatorState, setCalculatorState] = useState(null);
 
@@ -66,17 +67,17 @@ export function AppStateProvider({ children }) {
 
   async function fetchPersonalizedRecommendations(inputData) {
     if (!inputData) return;
-    
+
     // Determine if it's raw user data or a manual discovery payload
     const isManualDiscovery = !!inputData.goalType;
-    
+
     try {
       const payload = isManualDiscovery ? inputData : {
         goalType: inputData.preferences?.goal,
         riskComfort: inputData.preferences?.risk === 'High' ? 4 : inputData.preferences?.risk === 'Moderate' ? 3 : 2,
         horizonYears: parseInt(inputData.preferences?.horizon) || 5
       };
-      
+
       const { data } = await axios.post(`${API_URL}/funds/recommend`, payload);
       setPersonalizedRecommendations(data);
     } catch (error) {
@@ -101,14 +102,28 @@ export function AppStateProvider({ children }) {
   }
 
   async function syncPortfolio(newHoldings) {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || isSyncing) return;
+    
+    // Check if the holdings are actually different to avoid redundant network calls
+    const newKey = newHoldings.map(h => `${h.fundId}:${h.amount}:${h.units}`).join('|');
+    const currentKey = portfolio.map(h => `${h.fundId}:${h.amount}:${h.units}`).join('|');
+    
+    // If it's the same as what we think we have, don't sync
+    // (Note: this is a simple check, but portfolioKey below is more robust for analysis)
+
+    setIsSyncing(true);
     try {
       const { data } = await axios.post(`${API_URL}/portfolio/sync`, { holdings: newHoldings });
       if (data && data.holdings) {
-        setPortfolio(data.holdings);
+        const serverKey = data.holdings.map(h => `${h.fundId}:${h.amount}:${h.units}`).join('|');
+        if (serverKey !== newKey) {
+          setPortfolio(data.holdings);
+        }
       }
     } catch (error) {
       console.error('Failed to sync portfolio', error);
+    } finally {
+      setIsSyncing(false);
     }
   }
 
@@ -122,18 +137,30 @@ export function AppStateProvider({ children }) {
     }
   }, [portfolio, isAuthenticated]);
 
+  const portfolioKey = useMemo(
+    () => portfolio.map((holding) => [
+      holding.fundId || '',
+      holding.fundName || '',
+      holding.amount || 0,
+      holding.units || 0,
+      holding.years || 0,
+      holding.plan || ''
+    ].join(':')).join('|'),
+    [portfolio]
+  );
+
   // Hybrid Approach: Fetch validated results from backend
   useEffect(() => {
     const timer = setTimeout(async () => {
       try {
         const { data } = await axios.post(`${API_URL}/portfolio/analyze`, { holdings: portfolio });
-        setValidatedResults(data);
+        setValidatedResults({ ...data, portfolioKey });
       } catch (error) {
         console.warn('Backend analysis failed, staying on client estimate', error);
       }
     }, 800); // Slight delay after change
     return () => clearTimeout(timer);
-  }, [portfolio]);
+  }, [portfolio, portfolioKey]);
 
   // Fetch AI Insights
   useEffect(() => {
@@ -145,9 +172,9 @@ export function AppStateProvider({ children }) {
     const timer = setTimeout(async () => {
       setIsAiThinking(true);
       try {
-        const { data } = await axios.post(`${API_URL}/portfolio/insights/ai`, { 
+        const { data } = await axios.post(`${API_URL}/portfolio/insights/ai`, {
           portfolioData: validatedResults,
-          userPreferences: user?.preferences || {} 
+          userPreferences: user?.preferences || {}
         });
         setAiInsights(data);
       } catch (error) {
@@ -185,18 +212,18 @@ export function AppStateProvider({ children }) {
   }
 
   const instantResults = useMemo(() => analyzePortfolio(portfolio), [portfolio]);
-  
+
   // Merge instant results with validated data if available
   const results = useMemo(() => {
-    if (!validatedResults || !Array.isArray(validatedResults.funds)) return { ...instantResults, isValidated: false };
-    
-    // Check if validated results match current portfolio count to avoid stale data during race
-    if (validatedResults.funds.length !== portfolio.length) {
-       return { ...instantResults, isValidated: false };
+    // If we have validated results AND they match the current portfolio version, use them
+    if (validatedResults && Array.isArray(validatedResults.funds) && validatedResults.portfolioKey === portfolioKey) {
+      return { ...validatedResults, isValidated: true };
     }
-    
-    return { ...validatedResults, isValidated: true };
-  }, [instantResults, validatedResults, portfolio.length]);
+
+    // Otherwise, fallback to instant local estimates to prevent UI flickering/blank states
+    return { ...instantResults, isValidated: false };
+  }, [instantResults, validatedResults, portfolioKey]);
+
   const selectedHolding = useMemo(
     () => results.funds.find((fund) => fund.baseFundId === selectedFundId || fund.id === selectedFundId) || null,
     [results, selectedFundId]
@@ -213,7 +240,7 @@ export function AppStateProvider({ children }) {
   async function removeFromPortfolio(fundId) {
     const updated = portfolio.filter(h => h.fundId !== fundId);
     setPortfolio(updated);
-    
+
     if (isAuthenticated) {
       try {
         await axios.delete(`${API_URL}/portfolio/${fundId}`);
@@ -247,6 +274,7 @@ export function AppStateProvider({ children }) {
     exploreResults,
     personalizedRecommendations,
     isSearching,
+    isSyncing,
     searchUniverse,
     fetchPersonalizedRecommendations,
     aiInsights,

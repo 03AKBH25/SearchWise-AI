@@ -115,46 +115,46 @@ function AddFundModal({ fund, onClose, onConfirm }) {
           </div>
           <button className="icon-button" onClick={onClose}><X size={20} /></button>
         </div>
-        
+
         <div className="modal-body">
           <p className="modal-description">Enter your investment details to calculate potential cost savings and long-term growth.</p>
-          
+
           <div className="modal-form">
             <div className="modal-form-row">
               <label>
                 <span>Amount Invested (₹)</span>
-                <input 
-                  type="number" 
-                  value={amount} 
+                <input
+                  type="number"
+                  value={amount}
                   onChange={(e) => setAmount(Number(e.target.value))}
                   placeholder="e.g. 100000"
                   autoFocus
                 />
               </label>
-              
+
               <label>
                 <span>Units Held (Optional)</span>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   step="0.001"
-                  value={units} 
+                  value={units}
                   onChange={(e) => setUnits(Number(e.target.value))}
                   placeholder="e.g. 125.45"
                 />
               </label>
             </div>
-            
+
             <div className="modal-form-row">
               <label>
                 <span>Years Held</span>
-                <input 
-                  type="number" 
-                  value={years} 
+                <input
+                  type="number"
+                  value={years}
                   onChange={(e) => setYears(Number(e.target.value))}
                   placeholder="e.g. 5"
                 />
               </label>
-              
+
               <label>
                 <span>Current Plan</span>
                 <select value={plan} onChange={(e) => setPlan(e.target.value)}>
@@ -164,13 +164,13 @@ function AddFundModal({ fund, onClose, onConfirm }) {
               </label>
             </div>
           </div>
-          
+
           <div className="modal-info-box">
             <Info size={16} />
             <p>If you enter units, we will show your real current value based on today's AMFI NAV.</p>
           </div>
         </div>
-        
+
         <div className="modal-footer">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button onClick={() => onConfirm({ ...fund, amount, units, years, plan })}>
@@ -242,7 +242,7 @@ function AppShell() {
   const { user, isAuthenticated, isLoading, results, selectedFund, calculatorState, portfolio, setPortfolio } = useAppState();
   const [fundToConfigure, setFundToConfigure] = useState(null);
   const [toast, setToast] = useState(null);
-  
+
   const isGuestRoute = ['/', '/portfolio-input', '/processing', '/analysis-preview', '/sample-analysis', '/login'].includes(path);
   const userName = user?.name || 'Guest';
 
@@ -265,7 +265,7 @@ function AppShell() {
     navigate('/onboarding');
     return null;
   }
-  
+
   // Prevent returning to onboarding if already completed
   if (user && user.onboardingCompleted && path === '/onboarding') {
     navigate('/dashboard');
@@ -276,11 +276,11 @@ function AppShell() {
   return (
     <div className="app-frame">
       <Navbar theme={theme} setTheme={setTheme} active={routeName(path)} userName={userName} />
-      <CopilotPanel 
-        page={routeName(path)} 
-        results={results} 
-        selectedFund={selectedFund} 
-        userName={userName} 
+      <CopilotPanel
+        page={routeName(path)}
+        results={results}
+        selectedFund={selectedFund}
+        userName={userName}
         calculatorState={calculatorState}
       />
       <main className="page-shell route-transition" key={path}>
@@ -289,19 +289,24 @@ function AppShell() {
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <AddFundModal 
-        fund={fundToConfigure} 
-        onClose={() => setFundToConfigure(null)} 
+      <AddFundModal
+        fund={fundToConfigure}
+        onClose={() => setFundToConfigure(null)}
         onConfirm={(configuredFund) => {
+          addToExtendedDataset(configuredFund);
+          const fundId = configuredFund.slug || configuredFund.id || configuredFund.baseFundId;
           const newHolding = {
-            fundId: configuredFund.slug || configuredFund.id || configuredFund.baseFundId,
+            fundId,
             fundName: configuredFund.fundName || configuredFund.displayName,
             amount: configuredFund.amount,
             units: configuredFund.units,
             years: configuredFund.years,
             plan: configuredFund.plan
           };
-          setPortfolio([...portfolio, newHolding]);
+          setPortfolio((current) => {
+            const withoutDuplicate = current.filter((holding) => holding.fundId !== fundId);
+            return [...withoutDuplicate, newHolding];
+          });
           setFundToConfigure(null);
           setToast({ message: `${newHolding.fundName} added to your portfolio!`, type: 'success' });
         }}
@@ -319,11 +324,11 @@ function Navbar({ theme, setTheme, active, userName }) {
   const filteredFunds = useMemo(() => {
     if (!search.trim()) return [];
     const query = search.toLowerCase();
-    
+
     // Contextual source selection
     const isPortfolioContext = active === 'Portfolio' || active === 'Dashboard';
     const source = isPortfolioContext ? results.funds : fundDataset;
-    
+
     return source
       .filter(f => {
         const name = (f.fundName || f.name || '').toLowerCase();
@@ -362,15 +367,15 @@ function Navbar({ theme, setTheme, active, userName }) {
           </button>
         ))}
       </nav>
-      
+
       <div className="search-container">
         <form className="global-search" onSubmit={e => e.preventDefault()}>
           <Search size={17} />
-          <input 
-            value={search} 
+          <input
+            value={search}
             onChange={(e) => { setSearch(e.target.value); setShowResults(true); }}
             onFocus={() => setShowResults(true)}
-            placeholder={active === 'Portfolio' ? "Search your portfolio..." : "Search all funds..."} 
+            placeholder={active === 'Portfolio' ? "Search your portfolio..." : "Search all funds..."}
           />
         </form>
 
@@ -422,7 +427,7 @@ function Navbar({ theme, setTheme, active, userName }) {
             </div>
             <button onClick={() => navigate('/profile')}>Profile Settings</button>
             <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="theme-toggle-btn">
-              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />} 
+              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
               {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
             </button>
             <button onClick={logout} className="logout-btn">Logout</button>
@@ -486,7 +491,7 @@ function LandingPage({ theme, setTheme }) {
           <button onClick={() => scrollToSection('explore')}>Explore</button>
           <button onClick={() => scrollToSection('about')}>About</button>
         </nav>
-          <div className="landing-nav-actions">
+        <div className="landing-nav-actions">
           <Button variant="ghost" onClick={() => navigate('/login')}>Sign In</Button>
           <Button onClick={() => navigate('/portfolio-input')}>Get Started</Button>
         </div>
@@ -713,20 +718,20 @@ function CustomFundSearch({ value, onChange, onSelect, isSearching, options }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredOptions = options.filter(f => 
+  const filteredOptions = options.filter(f =>
     (f.displayName || f.fundName || '').toLowerCase().includes(value.toLowerCase())
   ).slice(0, 8);
 
   return (
     <div className="search-field-wrapper" ref={containerRef}>
-      <input 
-        value={value} 
+      <input
+        value={value}
         onChange={(e) => {
           onChange(e.target.value);
           setIsOpen(true);
-        }} 
+        }}
         onFocus={() => setIsOpen(true)}
-        placeholder="Search fund name..." 
+        placeholder="Search fund name..."
         autoComplete="off"
       />
       {isOpen && (value.length > 0 || isSearching) && (
@@ -738,8 +743,8 @@ function CustomFundSearch({ value, onChange, onSelect, isSearching, options }) {
             </div>
           ) : filteredOptions.length > 0 ? (
             filteredOptions.map((fund) => (
-              <button 
-                key={fund.slug || fund.id} 
+              <button
+                key={fund.slug || fund.id}
                 className="dropdown-item"
                 type="button"
                 onClick={() => {
@@ -797,10 +802,10 @@ function PortfolioInputPage() {
   }
 
   function handleFundSelect(id, fund) {
-    setRows((current) => current.map((row) => row.id === id ? { 
-      ...row, 
-      fundName: fund.displayName || fund.fundName, 
-      fundId: fund.slug || fund.id 
+    setRows((current) => current.map((row) => row.id === id ? {
+      ...row,
+      fundName: fund.displayName || fund.fundName,
+      fundId: fund.slug || fund.id
     } : row));
   }
 
@@ -868,7 +873,7 @@ function PortfolioInputPage() {
           <Card className="holding-input-row" key={row.id}>
             <label>
               <span>Fund name</span>
-              <CustomFundSearch 
+              <CustomFundSearch
                 value={row.fundName}
                 onChange={(val) => updateFundName(row.id, val)}
                 onSelect={(fund) => handleFundSelect(row.id, fund)}
@@ -1018,9 +1023,9 @@ function AnalysisPreviewPage({ mode }) {
           ) : aiInsights.length > 0 ? (
             aiInsights.map((insight, idx) => (
               <span key={idx} className={`ai-pill ${insight.type}`}>
-                {insight.type === 'positive' ? <CircleCheckBig size={15} /> : 
-                 insight.type === 'critical' ? <Flame size={15} /> : 
-                 <Info size={15} />}
+                {insight.type === 'positive' ? <CircleCheckBig size={15} /> :
+                  insight.type === 'critical' ? <Flame size={15} /> :
+                    <Info size={15} />}
                 {insight.title}: {insight.description}
               </span>
             ))
@@ -1223,7 +1228,7 @@ function DashboardPage() {
 
   // Derived decision data
   const healthScore = Math.max(58, Math.min(96, Math.round(92 - (results.totalLoss / Math.max(1, results.totalInvested)) * 180 - results.actionCount * 7)));
-  
+
   const priorityFunds = [...(results?.funds || [])]
     .filter(f => f.status === 'Needs Action')
     .sort((a, b) => b.lifetimeLoss - a.lifetimeLoss)
@@ -1242,13 +1247,13 @@ function DashboardPage() {
     <section className="stack dashboard-stack">
       {results.funds.length === 0 ? (
         <div className="dashboard-empty-wrapper">
-          <PageHeader 
-            eyebrow={`Welcome back, ${user?.firstName || 'Investor'}`} 
-            title="Your Dashboard" 
-            description="Start by adding your mutual funds to see your portfolio intelligence." 
+          <PageHeader
+            eyebrow={`Welcome back, ${user?.firstName || 'Investor'}`}
+            title="Your Dashboard"
+            description="Start by adding your mutual funds to see your portfolio intelligence."
           />
-          <EmptyState 
-            title="No Investments Detected" 
+          <EmptyState
+            title="No Investments Detected"
             description="Your dashboard is currently empty. Add your mutual fund holdings to unlock AI-driven insights, cost tracking, and risk analysis."
             actionText="Add Your First Fund"
             onAction={() => navigate('/explore')}
@@ -1257,10 +1262,10 @@ function DashboardPage() {
       ) : (
         <>
           <div className="dashboard-hero">
-            <PageHeader 
-              eyebrow={`Welcome back, ${user?.firstName || 'Investor'}`} 
-              title="Your Portfolio Intelligence" 
-              description="We've analyzed your costs, risk, and efficiency. Here is your situation today." 
+            <PageHeader
+              eyebrow={`Welcome back, ${user?.firstName || 'Investor'}`}
+              title="Your Portfolio Intelligence"
+              description="We've analyzed your costs, risk, and efficiency. Here is your situation today."
             />
             <PortfolioHealthCard score={healthScore} results={results} />
           </div>
@@ -1276,180 +1281,180 @@ function DashboardPage() {
             >
               <AllocationMiniBar data={results.allocationPercentages} />
             </SummaryCard>
-        <SummaryCard
-          label="Current value"
-          value={formatInr(results.currentValue)}
-          detail={`Based on latest NAV${results.latestNavDate ? ` (${results.latestNavDate})` : ''}`}
-          tone="good"
-          icon={ChartNoAxesCombined}
-          tooltip="NAV is the per-unit value published by the fund. Portfolio value changes when NAV changes."
-          onClick={() => navigate('/analysis/value')}
-        >
-          <div className="summary-returns-pill">
-            <span className={results.totalReturns >= 0 ? 'returns-positive' : 'returns-negative'}>
-              {results.totalReturns >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-              {formatInr(Math.abs(results.totalReturns))}
-              <small>({((results.totalReturns / Math.max(1, results.totalInvested)) * 100).toFixed(1)}%)</small>
-            </span>
-          </div>
-        </SummaryCard>
-        <SummaryCard
-          label="Cost Impact"
-          value={formatInr(results.totalLoss)}
-          detail={`${formatPercent(results.weightedExpense)} current weighted cost`}
-          tone="danger"
-          icon={Flame}
-          tooltip="Higher expense ratios reduce long-term returns because costs are reflected in daily NAV."
-          onClick={() => navigate('/analysis/cost')}
-        />
-        <SummaryCard
-          label="Action required"
-          value={results.actionCount}
-          detail="High impact areas"
-          tone="warn"
-          icon={Sparkles}
-          tooltip="Flagged areas include high expense, benchmark difference, and category concentration."
-          onClick={() => navigate('/analysis/actions')}
-        />
-      </div>
-
-      <div className="dashboard-intelligence-grid">
-        {/* PRIORITY ACTIONS */}
-        <Card className="panel priority-panel">
-          <SectionTitle title="High Impact Areas" action="View All" onAction={() => navigate('/analysis/actions')} />
-          <div className="priority-list">
-            {priorityFunds.length > 0 ? priorityFunds.map((fund, idx) => (
-              <div key={fund.id} className="priority-action-item">
-                <div className="priority-badge" data-priority={idx === 0 ? 'High' : 'Medium'}>
-                  {idx === 0 ? 'High Impact' : 'Medium'}
-                </div>
-                <div className="priority-info">
-                  <strong>{fund.fundName}</strong>
-                  <span>{formatInr(fund.lifetimeLoss)} cost impact | {fund.currentPlan}</span>
-                </div>
-                <Button variant="ghost" onClick={() => { setSelectedFundId(fund.baseFundId); navigate(`/fund/${fund.baseFundId}`); }}>
-                  Explore
-                </Button>
+            <SummaryCard
+              label="Current value"
+              value={formatInr(results.currentValue)}
+              detail={`Based on latest NAV${results.latestNavDate ? ` (${results.latestNavDate})` : ''}`}
+              tone="good"
+              icon={ChartNoAxesCombined}
+              tooltip="NAV is the per-unit value published by the fund. Portfolio value changes when NAV changes."
+              onClick={() => navigate('/analysis/value')}
+            >
+              <div className="summary-returns-pill">
+                <span className={results.totalReturns >= 0 ? 'returns-positive' : 'returns-negative'}>
+                  {results.totalReturns >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                  {formatInr(Math.abs(results.totalReturns))}
+                  <small>({((results.totalReturns / Math.max(1, results.totalInvested)) * 100).toFixed(1)}%)</small>
+                </span>
               </div>
-            )) : (
-              <div className="empty-state">
-                <CheckCircle2 className="good" />
-                <p>No urgent high impact areas detected in this model.</p>
-              </div>
-            )}
+            </SummaryCard>
+            <SummaryCard
+              label="Cost Impact"
+              value={formatInr(results.totalLoss)}
+              detail={`${formatPercent(results.weightedExpense)} current weighted cost`}
+              tone="danger"
+              icon={Flame}
+              tooltip="Higher expense ratios reduce long-term returns because costs are reflected in daily NAV."
+              onClick={() => navigate('/analysis/cost')}
+            />
+            <SummaryCard
+              label="Action required"
+              value={results.actionCount}
+              detail="High impact areas"
+              tone="warn"
+              icon={Sparkles}
+              tooltip="Flagged areas include high expense, benchmark difference, and category concentration."
+              onClick={() => navigate('/analysis/actions')}
+            />
           </div>
-        </Card>
 
-        {/* IMPACT PROJECTION */}
-        <Card className="panel impact-card">
-          <SectionTitle title="Cost Context" />
-          <div className="impact-projection-content">
-            <div className="impact-stat">
-              <span className="impact-label">Long-term Cost Impact</span>
-              <strong className="impact-value good">{formatInr(results.totalLoss)}</strong>
-            </div>
-            <div className="impact-stat">
-              <span className="impact-label">Direct Weighted Cost</span>
-              <strong className="impact-value">{formatPercent(results.directExpense)}</strong>
-            </div>
-            <p className="impact-copy">
-              Direct variants have lower expense ratios in this dataset. Lower costs may improve net outcomes, before tax and exit-load effects.
-            </p>
-            <div className="impact-badge">
-              <TrendingUp size={16} /> Educational estimate, not guaranteed
-            </div>
-          </div>
-        </Card>
-
-        {/* AI SMART INSIGHTS */}
-        <Card className="panel insights-panel wide ai-insights-section">
-          <SectionTitle title="AI Smart Insights" />
-          <div className="ai-insights-container">
-            {isAiThinking ? (
-              <div className="ai-loading-state">
-                <div className="ai-spinner" />
-                <span>SwitchWise AI is auditing your portfolio...</span>
-              </div>
-            ) : aiInsights.length > 0 ? (
-              <div className="ai-insight-list">
-                {aiInsights.map((insight, idx) => (
-                  <div key={idx} className={`ai-insight-card ${insight.type}`}>
-                    <div className="ai-insight-header">
-                      {insight.type === 'positive' ? <CheckCircle2 size={18} className="icon-positive" /> : 
-                       insight.type === 'critical' ? <Flame size={18} className="icon-critical" /> : 
-                       <Info size={18} className="icon-info" />}
-                      <strong>{insight.title}</strong>
+          <div className="dashboard-intelligence-grid">
+            {/* PRIORITY ACTIONS */}
+            <Card className="panel priority-panel">
+              <SectionTitle title="High Impact Areas" action="View All" onAction={() => navigate('/analysis/actions')} />
+              <div className="priority-list">
+                {priorityFunds.length > 0 ? priorityFunds.map((fund, idx) => (
+                  <div key={fund.id} className="priority-action-item">
+                    <div className="priority-badge" data-priority={idx === 0 ? 'High' : 'Medium'}>
+                      {idx === 0 ? 'High Impact' : 'Medium'}
                     </div>
-                    <p>{insight.description}</p>
+                    <div className="priority-info">
+                      <strong>{fund.fundName}</strong>
+                      <span>{formatInr(fund.lifetimeLoss)} cost impact | {fund.currentPlan}</span>
+                    </div>
+                    <Button variant="ghost" onClick={() => { setSelectedFundId(fund.baseFundId); navigate(`/fund/${fund.baseFundId}`); }}>
+                      Explore
+                    </Button>
+                  </div>
+                )) : (
+                  <div className="empty-state">
+                    <CheckCircle2 className="good" />
+                    <p>No urgent high impact areas detected in this model.</p>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* IMPACT PROJECTION */}
+            <Card className="panel impact-card">
+              <SectionTitle title="Cost Context" />
+              <div className="impact-projection-content">
+                <div className="impact-stat">
+                  <span className="impact-label">Long-term Cost Impact</span>
+                  <strong className="impact-value good">{formatInr(results.totalLoss)}</strong>
+                </div>
+                <div className="impact-stat">
+                  <span className="impact-label">Direct Weighted Cost</span>
+                  <strong className="impact-value">{formatPercent(results.directExpense)}</strong>
+                </div>
+                <p className="impact-copy">
+                  Direct variants have lower expense ratios in this dataset. Lower costs may improve net outcomes, before tax and exit-load effects.
+                </p>
+                <div className="impact-badge">
+                  <TrendingUp size={16} /> Educational estimate, not guaranteed
+                </div>
+              </div>
+            </Card>
+
+            {/* AI SMART INSIGHTS */}
+            <Card className="panel insights-panel wide ai-insights-section">
+              <SectionTitle title="AI Smart Insights" />
+              <div className="ai-insights-container">
+                {isAiThinking ? (
+                  <div className="ai-loading-state">
+                    <div className="ai-spinner" />
+                    <span>SwitchWise AI is auditing your portfolio...</span>
+                  </div>
+                ) : aiInsights.length > 0 ? (
+                  <div className="ai-insight-list">
+                    {aiInsights.map((insight, idx) => (
+                      <div key={idx} className={`ai-insight-card ${insight.type}`}>
+                        <div className="ai-insight-header">
+                          {insight.type === 'positive' ? <CheckCircle2 size={18} className="icon-positive" /> :
+                            insight.type === 'critical' ? <Flame size={18} className="icon-critical" /> :
+                              <Info size={18} className="icon-info" />}
+                          <strong>{insight.title}</strong>
+                        </div>
+                        <p>{insight.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="ai-empty-state">
+                    <p>Calculations complete. Waiting for AI auditor to summarize findings...</p>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* RATIOS + INTERPRETATION */}
+            <Card className="panel ratios-panel">
+              <SectionTitle title="Financial Ratios" action="Deep dive" onAction={() => navigate('/analysis/ratios')} />
+              <div className="ratio-grid">
+                <RatioTile label="Sharpe Ratio" value={results.ratioSummary.sharpe.value} badge={results.ratioSummary.sharpe.label} tooltip="Sharpe compares return with total volatility. Higher is generally better for risk-adjusted performance." />
+                <RatioTile label="Beta" value={results.ratioSummary.beta.value} badge={results.ratioSummary.beta.label} tooltip="Beta shows sensitivity to the market. Above 1 means more movement than the benchmark." />
+                <RatioTile label="Sortino" value={results.ratioSummary.sortino.value} badge={results.ratioSummary.sortino.label} tooltip="Sortino focuses on downside volatility, so it highlights harmful fluctuations." />
+              </div>
+            </Card>
+
+            {/* ALLOCATION + INTERPRETATION */}
+            <Card className="panel">
+              <SectionTitle title="Asset Mix" />
+              <PieChart data={results.allocation} />
+              <div className="allocation-interpretation">
+                <Info size={16} />
+                <p>{allocationInsight}</p>
+              </div>
+            </Card>
+
+            {/* FUND HIGHLIGHTS & COMPARISON */}
+            <Card className="panel highlights-panel">
+              <SectionTitle title="Performance Snapshot" />
+              <div className="snapshot-list">
+                <div className="snapshot-item">
+                  <div className="item-label">Best Fund</div>
+                  <div className="item-content">
+                    <strong>{results.highlights.best.fundName}</strong>
+                    <span className="status-chip good">Outperforming</span>
+                  </div>
+                </div>
+                <div className="snapshot-item">
+                  <div className="item-label">Worst Fund</div>
+                  <div className="item-content">
+                    <strong>{results.highlights.worst.fundName}</strong>
+                    <span className="status-chip danger">Underperforming</span>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            {/* ACTION SUMMARY */}
+            <Card className="panel action-summary-card">
+              <SectionTitle title="Your Next Steps" />
+              <div className="steps-list">
+                {nextSteps.map((step, idx) => (
+                  <div key={idx} className="step-item">
+                    <span className="step-num">{idx + 1}</span>
+                    <p>{step}</p>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="ai-empty-state">
-                <p>Calculations complete. Waiting for AI auditor to summarize findings...</p>
-              </div>
-            )}
+              <Button onClick={() => navigate('/portfolio')} className="w-full mt-16">
+                Explore Priority Areas
+              </Button>
+            </Card>
           </div>
-        </Card>
-
-        {/* RATIOS + INTERPRETATION */}
-        <Card className="panel ratios-panel">
-          <SectionTitle title="Financial Ratios" action="Deep dive" onAction={() => navigate('/analysis/ratios')} />
-          <div className="ratio-grid">
-            <RatioTile label="Sharpe Ratio" value={results.ratioSummary.sharpe.value} badge={results.ratioSummary.sharpe.label} tooltip="Sharpe compares return with total volatility. Higher is generally better for risk-adjusted performance." />
-            <RatioTile label="Beta" value={results.ratioSummary.beta.value} badge={results.ratioSummary.beta.label} tooltip="Beta shows sensitivity to the market. Above 1 means more movement than the benchmark." />
-            <RatioTile label="Sortino" value={results.ratioSummary.sortino.value} badge={results.ratioSummary.sortino.label} tooltip="Sortino focuses on downside volatility, so it highlights harmful fluctuations." />
-          </div>
-        </Card>
-
-        {/* ALLOCATION + INTERPRETATION */}
-        <Card className="panel">
-          <SectionTitle title="Asset Mix" />
-          <PieChart data={results.allocation} />
-          <div className="allocation-interpretation">
-            <Info size={16} />
-            <p>{allocationInsight}</p>
-          </div>
-        </Card>
-
-        {/* FUND HIGHLIGHTS & COMPARISON */}
-        <Card className="panel highlights-panel">
-          <SectionTitle title="Performance Snapshot" />
-          <div className="snapshot-list">
-            <div className="snapshot-item">
-              <div className="item-label">Best Fund</div>
-              <div className="item-content">
-                <strong>{results.highlights.best.fundName}</strong>
-                <span className="status-chip good">Outperforming</span>
-              </div>
-            </div>
-            <div className="snapshot-item">
-              <div className="item-label">Worst Fund</div>
-              <div className="item-content">
-                <strong>{results.highlights.worst.fundName}</strong>
-                <span className="status-chip danger">Underperforming</span>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* ACTION SUMMARY */}
-        <Card className="panel action-summary-card">
-          <SectionTitle title="Your Next Steps" />
-          <div className="steps-list">
-            {nextSteps.map((step, idx) => (
-              <div key={idx} className="step-item">
-                <span className="step-num">{idx + 1}</span>
-                <p>{step}</p>
-              </div>
-            ))}
-          </div>
-          <Button onClick={() => navigate('/portfolio')} className="w-full mt-16">
-            Explore Priority Areas
-          </Button>
-        </Card>
-      </div>
-      </>
+        </>
       )}
     </section>
   );
@@ -1683,8 +1688,8 @@ function PortfolioPage({ onAddFund }) {
     return (
       <section className="stack">
         <PageHeader eyebrow="Portfolio" title="Manage and improve your funds" description="A decision-first view of every fund, ranked by hidden loss, plan cost, and required action." />
-        <EmptyState 
-          title="Start Building Your Portfolio" 
+        <EmptyState
+          title="Start Building Your Portfolio"
           description="Once you add your funds, SwitchWise AI will automatically detect high-cost Regular plans, analyze your risk exposure, and suggest optimizations."
           actionText="Add Funds to Analyze"
           onAction={() => navigate('/explore')}
@@ -1712,7 +1717,7 @@ function PortfolioPage({ onAddFund }) {
         ))}
       </div>
       <div className="portfolio-list">
-        {sorted.map((fund) => <PortfolioCard key={fund.id} fund={fund} onView={() => openFund(fund)} onRemove={() => removeFromPortfolio(fund.baseFundId)} />)}
+        {sorted.map((fund) => <PortfolioCard key={fund.id} fund={fund} onView={() => openFund(fund)} onRemove={() => removeFromPortfolio(fund.holdingId || fund.baseFundId)} />)}
       </div>
     </section>
   );
@@ -1738,7 +1743,7 @@ function PortfolioAnalysisPage() {
   // Health score: penalise for regular plans and high expense
   const healthScore = Math.max(0, Math.min(100,
     100 - (regularCount / Math.max(1, funds.length)) * 40
-        - Math.min(40, totalLoss / Math.max(1, totalInvested) * 1000)
+    - Math.min(40, totalLoss / Math.max(1, totalInvested) * 1000)
   ));
   const scoreClass = healthScore >= 70 ? 'score-good' : healthScore >= 40 ? 'score-warn' : 'score-poor';
   const circumference = 2 * Math.PI * 40;
@@ -1766,7 +1771,7 @@ function PortfolioAnalysisPage() {
         setAiLoading(false);
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
@@ -2237,69 +2242,69 @@ function GoalDiscoveryModal({ isOpen, onClose, onApply }) {
         ) : (
           <>
 
-        <div className="modal-close-bar">
-          <button onClick={onClose} className="icon-button-clean">×</button>
-        </div>
-        
-        <div className="goal-modal-content">
-          <div className="goal-modal-header">
-            <div className="icon-ring-ai"><Sparkles size={24} /></div>
-            <h2>Refine Your Strategy</h2>
-            <p>Tell us what you're aiming for, and we'll suggest the best funds for that specific goal.</p>
-          </div>
-
-          <div className="goal-questions-grid">
-            <div className="goal-question">
-              <label>What are you primarily investing for?</label>
-              <div className="pill-group">
-                {goals.map(g => (
-                  <button key={g} className={`pill ${formData.goal === g ? 'active' : ''}`} onClick={() => setFormData({...formData, goal: g})}>{g}</button>
-                ))}
-              </div>
+            <div className="modal-close-bar">
+              <button onClick={onClose} className="icon-button-clean">×</button>
             </div>
 
-            <div className="goal-question">
-              <label>How long do you plan to stay invested?</label>
-              <div className="pill-group">
-                {horizons.map(h => (
-                  <button key={h} className={`pill ${formData.horizon === h ? 'active' : ''}`} onClick={() => setFormData({...formData, horizon: h})}>{h}</button>
-                ))}
+            <div className="goal-modal-content">
+              <div className="goal-modal-header">
+                <div className="icon-ring-ai"><Sparkles size={24} /></div>
+                <h2>Refine Your Strategy</h2>
+                <p>Tell us what you're aiming for, and we'll suggest the best funds for that specific goal.</p>
+              </div>
+
+              <div className="goal-questions-grid">
+                <div className="goal-question">
+                  <label>What are you primarily investing for?</label>
+                  <div className="pill-group">
+                    {goals.map(g => (
+                      <button key={g} className={`pill ${formData.goal === g ? 'active' : ''}`} onClick={() => setFormData({ ...formData, goal: g })}>{g}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="goal-question">
+                  <label>How long do you plan to stay invested?</label>
+                  <div className="pill-group">
+                    {horizons.map(h => (
+                      <button key={h} className={`pill ${formData.horizon === h ? 'active' : ''}`} onClick={() => setFormData({ ...formData, horizon: h })}>{h}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="goal-question">
+                  <label>How comfortable are you with market fluctuations?</label>
+                  <div className="pill-group">
+                    {risks.map(r => (
+                      <button key={r} className={`pill ${formData.risk === r ? 'active' : ''}`} onClick={() => setFormData({ ...formData, risk: r })}>{r}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="goal-question">
+                  <label>How do you plan to invest?</label>
+                  <div className="pill-group">
+                    {methods.map(m => (
+                      <button key={m} className={`pill ${formData.method === m ? 'active' : ''}`} onClick={() => setFormData({ ...formData, method: m })}>{m}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="goal-question">
+                  <label>What matters most to you?</label>
+                  <div className="pill-group">
+                    {preferences.map(p => (
+                      <button key={p} className={`pill ${formData.preference === p ? 'active' : ''}`} onClick={() => setFormData({ ...formData, preference: p })}>{p}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="goal-modal-footer">
+                <Button variant="ghost" onClick={onClose}>Cancel</Button>
+                <Button onClick={handleApply}>Show Best Match Funds <ArrowRight size={18} /></Button>
               </div>
             </div>
-
-            <div className="goal-question">
-              <label>How comfortable are you with market fluctuations?</label>
-              <div className="pill-group">
-                {risks.map(r => (
-                  <button key={r} className={`pill ${formData.risk === r ? 'active' : ''}`} onClick={() => setFormData({...formData, risk: r})}>{r}</button>
-                ))}
-              </div>
-            </div>
-
-            <div className="goal-question">
-              <label>How do you plan to invest?</label>
-              <div className="pill-group">
-                {methods.map(m => (
-                  <button key={m} className={`pill ${formData.method === m ? 'active' : ''}`} onClick={() => setFormData({...formData, method: m})}>{m}</button>
-                ))}
-              </div>
-            </div>
-
-            <div className="goal-question">
-              <label>What matters most to you?</label>
-              <div className="pill-group">
-                {preferences.map(p => (
-                  <button key={p} className={`pill ${formData.preference === p ? 'active' : ''}`} onClick={() => setFormData({...formData, preference: p})}>{p}</button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="goal-modal-footer">
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button onClick={handleApply}>Show Best Match Funds <ArrowRight size={18} /></Button>
-          </div>
-        </div>
           </>
         )}
       </Card>
@@ -2326,10 +2331,10 @@ function ExplorePage({ onAddFund }) {
         setRisk(mappedRisk);
       }
       if (user.preferences.preference && category === 'All') {
-         const pref = user.preferences.preference;
-         if (pref.includes('Equity')) setCategory('Equity');
-         else if (pref.includes('Debt')) setCategory('Debt');
-         else if (pref.includes('Index')) setCategory('Index Fund');
+        const pref = user.preferences.preference;
+        if (pref.includes('Equity')) setCategory('Equity');
+        else if (pref.includes('Debt')) setCategory('Debt');
+        else if (pref.includes('Index')) setCategory('Index Fund');
       }
     }
   }, [user]);
@@ -2364,7 +2369,7 @@ function ExplorePage({ onAddFund }) {
   return (
     <section className="stack">
       <PageHeader eyebrow="Explore" title="Discover funds intelligently" description="Search, filter, and compare funds using cost, category, risk, and portfolio fit." />
-      
+
       <div className="explore-top-section">
         {personalizedRecommendations && personalizedRecommendations.candidates?.length > 0 && (
           <Card className="personalized-section landing-reveal">
@@ -2445,20 +2450,20 @@ function ExplorePage({ onAddFund }) {
         {(exploreResults || []).map((fund) => {
           const id = fund?.id || fund?.slug;
           return (
-            <FundCard 
-              key={id || Math.random()} 
-              fund={fund} 
-              onView={() => openFund(id)} 
-              watched={(watchlist || []).includes(id)} 
-              onToggleWatch={() => toggleWatch(id)} 
+            <FundCard
+              key={id || Math.random()}
+              fund={fund}
+              onView={() => openFund(id)}
+              watched={(watchlist || []).includes(id)}
+              onToggleWatch={() => toggleWatch(id)}
               onAdd={(results?.funds || []).some(f => f.baseFundId === id) ? null : () => onAddFund(fund)}
             />
           );
         })}
       </div>
-      <GoalDiscoveryModal 
-        isOpen={isGoalModalOpen} 
-        onClose={() => setIsGoalModalOpen(false)} 
+      <GoalDiscoveryModal
+        isOpen={isGoalModalOpen}
+        onClose={() => setIsGoalModalOpen(false)}
         onApply={(payload) => {
           fetchPersonalizedRecommendations(payload);
           setActiveGoal(payload.goalType.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
@@ -2650,9 +2655,9 @@ function FundDetailPage({ id, onAddFund }) {
 
   return (
     <section className="stack">
-      <PageHeader 
-        eyebrow="Fund Detail" 
-        title={fund.fundName} 
+      <PageHeader
+        eyebrow="Fund Detail"
+        title={fund.fundName}
         description={`${fund.category} · ${fund.assetClass} · ${fund.risk} risk`}
       >
         {portfolioFund ? (
@@ -2794,7 +2799,7 @@ function WatchlistPage() {
 function ProfilePage() {
   const { results } = useAppState();
   const [theme, setTheme] = useTheme();
-  
+
   return (
     <section className="stack">
       <PageHeader eyebrow="Profile" title="Your SwitchWise settings" description="Theme preference is saved locally. Portfolio data in this prototype stays in the browser session." />

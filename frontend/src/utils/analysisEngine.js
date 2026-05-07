@@ -17,8 +17,9 @@ export function mapBackendFundToLocal(f) {
   if (f.id && f.directExpense !== undefined) return f;
 
   const id = f.slug || f.id || f.baseFundId;
-  const direct = f.variants?.direct || f.variants?.[0] || {};
-  const regular = f.variants?.regular || f.variants?.[1] || {};
+  const variants = Array.isArray(f.variants) ? f.variants : Object.values(f.variants || {});
+  const direct = variants.find((variant) => variant?.variant === 'direct') || f.variants?.direct || variants[0] || {};
+  const regular = variants.find((variant) => variant?.variant === 'regular') || f.variants?.regular || variants[1] || {};
 
   return {
     id,
@@ -33,11 +34,11 @@ export function mapBackendFundToLocal(f) {
     expectedReturn: f.fiveYearReturn
       ? f.fiveYearReturn                                          // real 5Y CAGR
       : f.expectedGrossReturn ? f.expectedGrossReturn * 100       // catalog gross return
-      : 10,                                                       // generic fallback
-    oneYearReturn:   f.oneYearReturn   || null,
+        : 10,                                                       // generic fallback
+    oneYearReturn: f.oneYearReturn || null,
     threeYearReturn: f.threeYearReturn || null,
-    fiveYearReturn:  f.fiveYearReturn  || null,
-    returnsSource:   f.returnsSource   || 'Estimated',
+    fiveYearReturn: f.fiveYearReturn || null,
+    returnsSource: f.returnsSource || 'Estimated',
     latestNav: direct.nav || f.latestNav,
     navDate: direct.navDate || f.navDate,
     benchmark: f.benchmark || 'NIFTY 50 TRI'
@@ -175,14 +176,14 @@ export function analyzeHolding(holding, index = 0) {
   const years = Number(holding.years || 10);
   const amount = Number(holding.amount || 0);
   const units = Number(holding.units || 0);
-  
+
   // Try to use latestNav for current value if units are available
   const latestNav = fund.latestNav || 0;
   // Calculate units from amount if not provided manually
   const effectiveUnits = units > 0 ? units : (latestNav > 0 ? amount / latestNav : 0);
-  
-  const currentValue = effectiveUnits > 0 
-    ? Math.round(effectiveUnits * latestNav) 
+
+  const currentValue = effectiveUnits > 0
+    ? Math.round(effectiveUnits * latestNav)
     : Number(holding.currentValue || amount);
 
   const currentExpense = currentPlan === 'Direct' ? fund.directExpense : fund.regularExpense;
@@ -197,6 +198,7 @@ export function analyzeHolding(holding, index = 0) {
     ...fund,
     id: `${fund.id}-${index}`,
     baseFundId: fund.id,
+    holdingId: holding.fundId || fund.id,
     inputName: holding.fundName,
     amount,
     units: effectiveUnits,
@@ -310,19 +312,19 @@ export function analyzePortfolio(portfolio) {
   const insights = [
     regularCount
       ? {
-          id: 'regular-plan',
-          title: `${regularCount} funds in Regular plans`,
-          detail: 'Regular variants usually carry higher annual costs than Direct variants.',
-          description: 'Regular variants usually carry higher annual costs than Direct variants.',
-          severity: 'high'
-        }
+        id: 'regular-plan',
+        title: `${regularCount} funds in Regular plans`,
+        detail: 'Regular variants usually carry higher annual costs than Direct variants.',
+        description: 'Regular variants usually carry higher annual costs than Direct variants.',
+        severity: 'high'
+      }
       : {
-          id: 'regular-plan',
-          title: 'All detected plans are Direct',
-          detail: 'Your visible plan selection is already cost-aware.',
-          description: 'Your visible plan selection is already cost-aware.',
-          severity: 'good'
-        },
+        id: 'regular-plan',
+        title: 'All detected plans are Direct',
+        detail: 'Your visible plan selection is already cost-aware.',
+        description: 'Your visible plan selection is already cost-aware.',
+        severity: 'good'
+      },
     {
       id: 'expense-ratio',
       title: `${highExpenseFunds.length} high expense funds detected`,
