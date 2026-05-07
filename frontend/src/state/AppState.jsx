@@ -103,7 +103,10 @@ export function AppStateProvider({ children }) {
   async function syncPortfolio(newHoldings) {
     if (!isAuthenticated) return;
     try {
-      await axios.post(`${API_URL}/portfolio/sync`, { holdings: newHoldings });
+      const { data } = await axios.post(`${API_URL}/portfolio/sync`, { holdings: newHoldings });
+      if (data && data.holdings) {
+        setPortfolio(data.holdings);
+      }
     } catch (error) {
       console.error('Failed to sync portfolio', error);
     }
@@ -207,6 +210,19 @@ export function AppStateProvider({ children }) {
     [watchlist]
   );
 
+  async function removeFromPortfolio(fundId) {
+    const updated = portfolio.filter(h => h.fundId !== fundId);
+    setPortfolio(updated);
+    
+    if (isAuthenticated) {
+      try {
+        await axios.delete(`${API_URL}/portfolio/${fundId}`);
+      } catch (error) {
+        console.error('Failed to remove fund from server', error);
+      }
+    }
+  }
+
   const value = {
     user,
     isAuthenticated,
@@ -215,6 +231,7 @@ export function AppStateProvider({ children }) {
     logout,
     portfolio,
     setPortfolio,
+    removeFromPortfolio,
     guestPortfolio,
     setGuestPortfolio,
     guestResults,

@@ -72,6 +72,13 @@ export async function analyzeHolding(holding, index = 0) {
   const directVariant = variantsArray.find(v => v.variant === 'direct');
   const regularVariant = variantsArray.find(v => v.variant === 'regular');
 
+  const currentPlan = holding.plan || detectPlan(holding.fundName);
+  
+  // Find the specific variant's NAV
+  const variantData = currentPlan === 'Direct' ? directVariant : regularVariant;
+  const latestNav = variantData?.nav || variantsArray[0]?.nav || 0;
+  const navDate = variantData?.navDate || variantsArray[0]?.navDate;
+
   const fund = {
     id: fundData.slug,
     fundName: fundData.displayName,
@@ -80,7 +87,7 @@ export async function analyzeHolding(holding, index = 0) {
     risk: fundData.riskLabel,
     directExpense: directVariant?.expenseRatio || 0.75,
     regularExpense: regularVariant?.expenseRatio || 1.65,
-    expectedReturn: (fundData.expectedGrossReturn || 0.12) * 100, // Convert to percentage if it's decimal
+    expectedReturn: (fundData.expectedGrossReturn || 0.12) * 100, 
     fiveYearReturn: 12.5, 
     benchmarkReturn: 13.0,
     benchmarkVolatility: 0.14 * 100,
@@ -88,26 +95,30 @@ export async function analyzeHolding(holding, index = 0) {
     downsideDeviation: (fundData.standardDeviation || 0.12) * 0.65 * 100,
     correlation: fundData.correlation || 0.88,
     riskFreeRate: (fundData.riskFreeRate || 0.065) * 100,
-    navDate: variantsArray[0]?.navDate,
-    latestNav: variantsArray[0]?.nav,
+    navDate,
+    latestNav,
     benchmark: fundData.benchmark,
     aumCrore: fundData.aumCrore
   };
 
   // If expectedReturn is already a large number (like 12), don't multiply by 100
   if (fund.expectedReturn > 100) fund.expectedReturn /= 100;
-  if (fund.standardDeviation > 100) fund.standardDeviation /= 100; // Actually sd is usually like 12
+  if (fund.standardDeviation > 100) fund.standardDeviation /= 100;
   
-  // Let's be safe: frontend expects percentages (like 12 for 12%)
   fund.expectedReturn = fundData.expectedGrossReturn > 1 ? fundData.expectedGrossReturn : (fundData.expectedGrossReturn * 100 || 12);
   fund.standardDeviation = fundData.standardDeviation > 1 ? fundData.standardDeviation : (fundData.standardDeviation * 100 || 12);
   fund.riskFreeRate = fundData.riskFreeRate > 1 ? fundData.riskFreeRate : (fundData.riskFreeRate * 100 || 6.5);
 
 
-  const currentPlan = holding.plan || detectPlan(holding.fundName);
   const years = Number(holding.years || 10);
   const amount = Number(holding.amount || 0);
-  const currentValue = Number(holding.currentValue || amount);
+  const units = Number(holding.units || 0);
+  
+  // Calculate real current value based on units if available, else fallback
+  const currentValue = units > 0 
+    ? Math.round(units * latestNav) 
+    : Number(holding.currentValue || amount);
+
   const currentExpense = currentPlan === 'Direct' ? fund.directExpense : fund.regularExpense;
   const suggestedExpense = fund.directExpense;
   const currentFV = futureValue(amount, fund.expectedReturn, currentExpense, years);
@@ -122,6 +133,7 @@ export async function analyzeHolding(holding, index = 0) {
     baseFundId: fund.id,
     inputName: holding.fundName,
     amount,
+    units,
     currentValue,
     years,
     currentPlan,

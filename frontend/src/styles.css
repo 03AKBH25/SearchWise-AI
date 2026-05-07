@@ -963,6 +963,21 @@ select:focus {
   border: 1px solid var(--line);
 }
 
+.button.danger {
+  background: var(--danger);
+  color: white;
+}
+
+.button.danger-ghost {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--line));
+}
+
+.button.danger-ghost:hover {
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
 .stack {
   display: grid;
   gap: 18px;
@@ -1091,6 +1106,43 @@ label span,
 .summary-card.warn strong { color: var(--warn); }
 .summary-card.good .summary-icon,
 .summary-card.good strong { color: var(--good); }
+
+/* --- Summary Profit/Loss --- */
+.summary-returns-pill {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.returns-positive, .returns-negative {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.returns-positive {
+  background: color-mix(in srgb, var(--good) 12%, transparent);
+  color: var(--good);
+}
+
+.returns-negative {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.returns-positive small, .returns-negative small {
+  font-size: 0.75rem;
+  opacity: 0.85;
+  margin-left: 2px;
+}
+
+.text-good { color: var(--good); }
+.text-danger { color: var(--danger); }
+.text-warn { color: var(--warn); }
 
 .dashboard-grid,
 .fund-detail-grid {

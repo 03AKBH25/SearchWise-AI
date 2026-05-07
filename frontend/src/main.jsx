@@ -99,6 +99,7 @@ function EmptyState({ title, description, actionText, onAction, image = "/empty_
 
 function AddFundModal({ fund, onClose, onConfirm }) {
   const [amount, setAmount] = useState(100000);
+  const [units, setUnits] = useState(0);
   const [years, setYears] = useState(5);
   const [plan, setPlan] = useState('Regular');
 
@@ -119,16 +120,29 @@ function AddFundModal({ fund, onClose, onConfirm }) {
           <p className="modal-description">Enter your investment details to calculate potential cost savings and long-term growth.</p>
           
           <div className="modal-form">
-            <label>
-              <span>Amount Invested (₹)</span>
-              <input 
-                type="number" 
-                value={amount} 
-                onChange={(e) => setAmount(Number(e.target.value))}
-                placeholder="e.g. 100000"
-                autoFocus
-              />
-            </label>
+            <div className="modal-form-row">
+              <label>
+                <span>Amount Invested (₹)</span>
+                <input 
+                  type="number" 
+                  value={amount} 
+                  onChange={(e) => setAmount(Number(e.target.value))}
+                  placeholder="e.g. 100000"
+                  autoFocus
+                />
+              </label>
+              
+              <label>
+                <span>Units Held (Optional)</span>
+                <input 
+                  type="number" 
+                  step="0.001"
+                  value={units} 
+                  onChange={(e) => setUnits(Number(e.target.value))}
+                  placeholder="e.g. 125.45"
+                />
+              </label>
+            </div>
             
             <div className="modal-form-row">
               <label>
@@ -153,13 +167,13 @@ function AddFundModal({ fund, onClose, onConfirm }) {
           
           <div className="modal-info-box">
             <Info size={16} />
-            <p>SwitchWise will compare this against the Direct variant to show you the hidden cost drag.</p>
+            <p>If you enter units, we will show your real current value based on today's AMFI NAV.</p>
           </div>
         </div>
         
         <div className="modal-footer">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onConfirm({ ...fund, amount, years, plan })}>
+          <Button onClick={() => onConfirm({ ...fund, amount, units, years, plan })}>
             Add to Portfolio <ArrowRight size={18} />
           </Button>
         </div>
@@ -283,6 +297,7 @@ function AppShell() {
             fundId: configuredFund.slug || configuredFund.id || configuredFund.baseFundId,
             fundName: configuredFund.fundName || configuredFund.displayName,
             amount: configuredFund.amount,
+            units: configuredFund.units,
             years: configuredFund.years,
             plan: configuredFund.plan
           };
@@ -749,8 +764,8 @@ function CustomFundSearch({ value, onChange, onSelect, isSearching, options }) {
 function PortfolioInputPage() {
   const { setGuestPortfolio, setGuestResults, setPortfolio } = useAppState();
   const [rows, setRows] = useState([
-    { id: crypto.randomUUID(), fundId: 'hdfc-flexi-cap', fundName: 'HDFC Flexi Cap Fund', amount: 250000, years: 8, plan: 'Regular' },
-    { id: crypto.randomUUID(), fundId: 'parag-parikh-flexi-cap', fundName: 'Parag Parikh Flexi Cap Fund', amount: 180000, years: 5, plan: 'Direct' }
+    { id: crypto.randomUUID(), fundId: 'hdfc-flexi-cap', fundName: 'HDFC Flexi Cap Fund', amount: 250000, units: 1450.45, years: 8, plan: 'Regular' },
+    { id: crypto.randomUUID(), fundId: 'parag-parikh-flexi-cap', fundName: 'Parag Parikh Flexi Cap Fund', amount: 180000, units: 250, years: 5, plan: 'Direct' }
   ]);
   const [error, setError] = useState('');
   const [dynamicOptions, setDynamicOptions] = useState(fundDataset);
@@ -798,7 +813,7 @@ function PortfolioInputPage() {
   }
 
   function addRow() {
-    setRows((current) => [...current, { id: crypto.randomUUID(), fundId: '', fundName: '', amount: '', years: 5, plan: 'Regular' }]);
+    setRows((current) => [...current, { id: crypto.randomUUID(), fundId: '', fundName: '', amount: '', units: '', years: 5, plan: 'Regular' }]);
   }
 
   function removeRow(id) {
@@ -813,6 +828,7 @@ function PortfolioInputPage() {
         fundId: fund.id,
         fundName: `${fund.fundName} ${plan}`,
         amount: Number(row.amount),
+        units: Number(row.units || 0),
         currentValue: Number(row.amount),
         years: Number(row.years || 5),
         plan
@@ -842,8 +858,9 @@ function PortfolioInputPage() {
         <div className="input-row-head">
           <span>Fund</span>
           <span>Plan</span>
-          <span>Amount invested</span>
-          <span>Years held</span>
+          <span>Invested</span>
+          <span>Units (Opt.)</span>
+          <span>Years</span>
           <span />
         </div>
         {rows.map((row) => (
@@ -866,11 +883,15 @@ function PortfolioInputPage() {
               </select>
             </label>
             <label>
-              <span>Amount invested</span>
+              <span>Amount</span>
               <input type="number" min="1" value={row.amount} onChange={(event) => updateRow(row.id, 'amount', event.target.value)} placeholder="250000" />
             </label>
             <label>
-              <span>Years held</span>
+              <span>Units</span>
+              <input type="number" step="0.001" min="0" value={row.units} onChange={(event) => updateRow(row.id, 'units', event.target.value)} placeholder="145.5" />
+            </label>
+            <label>
+              <span>Years</span>
               <input type="number" min="1" max="40" value={row.years} onChange={(event) => updateRow(row.id, 'years', event.target.value)} placeholder="5" />
             </label>
             <button type="button" className="icon-button remove-row" onClick={() => removeRow(row.id)} title="Remove fund">
@@ -1262,7 +1283,15 @@ function DashboardPage() {
           icon={ChartNoAxesCombined}
           tooltip="NAV is the per-unit value published by the fund. Portfolio value changes when NAV changes."
           onClick={() => navigate('/analysis/value')}
-        />
+        >
+          <div className="summary-returns-pill">
+            <span className={results.totalReturns >= 0 ? 'returns-positive' : 'returns-negative'}>
+              {results.totalReturns >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+              {formatInr(Math.abs(results.totalReturns))}
+              <small>({((results.totalReturns / Math.max(1, results.totalInvested)) * 100).toFixed(1)}%)</small>
+            </span>
+          </div>
+        </SummaryCard>
         <SummaryCard
           label="Cost Impact"
           value={formatInr(results.totalLoss)}
@@ -1636,7 +1665,7 @@ function AnalysisDetailPage({ path }) {
 
 
 function PortfolioPage({ onAddFund }) {
-  const { results, setSelectedFundId } = useAppState();
+  const { results, setSelectedFundId, removeFromPortfolio } = useAppState();
   const [filter, setFilter] = useState('Needs action');
   const sorted = [...results.funds].sort((a, b) => {
     if (filter === 'High expense') return b.currentExpense - a.currentExpense;
@@ -1682,7 +1711,7 @@ function PortfolioPage({ onAddFund }) {
         ))}
       </div>
       <div className="portfolio-list">
-        {sorted.map((fund) => <PortfolioCard key={fund.id} fund={fund} onView={() => openFund(fund)} />)}
+        {sorted.map((fund) => <PortfolioCard key={fund.id} fund={fund} onView={() => openFund(fund)} onRemove={() => removeFromPortfolio(fund.baseFundId)} />)}
       </div>
     </section>
   );
@@ -2182,7 +2211,7 @@ function LumpsumDonut({ invested, returns }) {
 }
 
 function FundDetailPage({ id, onAddFund }) {
-  const { results, guestResults, setSelectedFundId } = useAppState();
+  const { results, guestResults, setSelectedFundId, removeFromPortfolio } = useAppState();
   const fund = findFundById(id) || fundDataset[0];
   const activeResults = guestResults || results;
   const portfolioFund = activeResults.funds.find((item) => item.baseFundId === id);
@@ -2200,7 +2229,11 @@ function FundDetailPage({ id, onAddFund }) {
         title={fund.fundName} 
         description={`${fund.category} · ${fund.assetClass} · ${fund.risk} risk`}
       >
-        {!portfolioFund && (
+        {portfolioFund ? (
+          <Button variant="danger-ghost" onClick={() => { removeFromPortfolio(id); navigate('/portfolio'); }}>
+            Remove Fund <Trash2 size={16} />
+          </Button>
+        ) : (
           <Button onClick={() => onAddFund(fund)}>
             Add to Portfolio <Plus size={16} />
           </Button>
@@ -2252,7 +2285,15 @@ function FundDetailPage({ id, onAddFund }) {
           <h2>{portfolioFund ? 'How does the lower-cost variant compare?' : 'How does this fund compare?'}</h2>
           <p>{portfolioFund ? `Direct plan has lower expense by ${formatPercent(Math.max(0, analyzed.currentExpense - analyzed.suggestedExpense))}. Estimated cost impact is ${formatInr(analyzed.lifetimeLoss)} before tax and exit-load effects.` : 'This fund can be compared for cost, benchmark fit, and risk level before any decision.'}</p>
           <div className="button-row">
-            {!portfolioFund && <Button onClick={() => onAddFund(fund)}>Add to Portfolio <Plus size={16} /></Button>}
+            {portfolioFund ? (
+              <Button variant="danger-ghost" onClick={() => { removeFromPortfolio(id); navigate('/portfolio'); }}>
+                Remove from Portfolio <Trash2 size={16} />
+              </Button>
+            ) : (
+              <Button onClick={() => onAddFund(fund)}>
+                Add to Portfolio <Plus size={16} />
+              </Button>
+            )}
             {alternatives.map((item) => <Button key={item.id} variant="secondary" onClick={() => navigate(`/fund/${item.id}`)}>{item.fundName}</Button>)}
           </div>
           <label><span>Compare with another fund</span><select onChange={(event) => event.target.value && navigate(`/fund/${event.target.value}`)} defaultValue=""><option value="">Select fund</option>{fundDataset.filter((item) => item.id !== fund.id).map((item) => <option key={item.id} value={item.id}>{item.fundName}</option>)}</select></label>

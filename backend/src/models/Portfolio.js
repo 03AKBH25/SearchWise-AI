@@ -4,6 +4,7 @@ const holdingSchema = new mongoose.Schema({
   fundId: { type: String, required: true },
   fundName: { type: String, required: true },
   amount: { type: Number, required: true },
+  units: { type: Number, default: 0 },
   currentValue: { type: Number },
   years: { type: Number, default: 5 },
   plan: { type: String, enum: ['Direct', 'Regular'], default: 'Regular' }

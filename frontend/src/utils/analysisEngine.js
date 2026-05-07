@@ -169,7 +169,14 @@ export function analyzeHolding(holding, index = 0) {
   const currentPlan = holding.plan || detectPlan(holding.fundName);
   const years = Number(holding.years || 10);
   const amount = Number(holding.amount || 0);
-  const currentValue = Number(holding.currentValue || amount);
+  const units = Number(holding.units || 0);
+  
+  // Try to use latestNav for current value if units are available
+  const latestNav = fund.latestNav || 0;
+  const currentValue = units > 0 
+    ? Math.round(units * latestNav) 
+    : Number(holding.currentValue || amount);
+
   const currentExpense = currentPlan === 'Direct' ? fund.directExpense : fund.regularExpense;
   const suggestedExpense = fund.directExpense;
   const currentFV = futureValue(amount, fund.expectedReturn, currentExpense, years);
@@ -184,6 +191,7 @@ export function analyzeHolding(holding, index = 0) {
     baseFundId: fund.id,
     inputName: holding.fundName,
     amount,
+    units,
     currentValue,
     years,
     currentPlan,

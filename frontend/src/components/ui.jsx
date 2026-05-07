@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight, Bot, Check, MessageSquare, Plus, Send, SlidersHorizontal, Star, X } from 'lucide-react';
+import { ArrowRight, Bot, Check, MessageSquare, Plus, Send, SlidersHorizontal, Star, Trash2, X } from 'lucide-react';
 import { fundDataset } from '../data/fundDataset';
 import { formatInr, formatPercent, generateCopilotResponse } from '../utils/analysisEngine';
 
@@ -66,7 +66,7 @@ export function InsightCard({ insight, onClick }) {
   );
 }
 
-export function PortfolioCard({ fund, onView }) {
+export function PortfolioCard({ fund, onView, onRemove }) {
   return (
     <Card className="portfolio-card">
       <div className="portfolio-main">
@@ -78,14 +78,26 @@ export function PortfolioCard({ fund, onView }) {
       </div>
       <div className="portfolio-metrics">
         <Metric label="Invested" value={formatInr(fund.amount)} />
+        <Metric label="Units" value={fund.units?.toFixed(2) || '0.00'} />
         <Metric label="Current value" value={formatInr(fund.currentValue)} />
+        <Metric label="Returns" value={
+          <span className={fund.currentValue >= fund.amount ? 'text-good' : 'text-danger'}>
+            {fund.currentValue >= fund.amount ? '+' : ''}{formatInr(fund.currentValue - fund.amount)}
+          </span>
+        } />
         <Metric label="Plan" value={fund.currentPlan} />
         <Metric label="Expense" value={formatPercent(fund.currentExpense)} />
-        <Metric label="Cost impact" value={formatInr(fund.lifetimeLoss)} strong />
       </div>
       <div className="portfolio-actions">
         <span>{fund.recommendation === 'Explore' ? 'Cost review area' : fund.recommendation === 'Wait' ? 'Review later' : 'No urgent action'}</span>
-        <Button variant="secondary" onClick={onView}>Open <ArrowRight size={16} /></Button>
+        <div className="button-row">
+          {onRemove && (
+            <Button variant="danger-ghost" onClick={onRemove} title="Remove from portfolio">
+              <Trash2 size={16} />
+            </Button>
+          )}
+          <Button variant="secondary" onClick={onView}>Open <ArrowRight size={16} /></Button>
+        </div>
       </div>
     </Card>
   );
