@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import axios from 'axios';
+import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowRight,
@@ -1733,7 +1734,7 @@ function GoalDiscoveryModal({ isOpen, onClose, onApply }) {
     onClose();
   };
 
-  return (
+  return createPortal(
     <div className="modal-backdrop goal-modal-backdrop">
       <Card className="goal-discovery-modal landing-reveal">
         <div className="modal-close-bar">
@@ -1800,7 +1801,8 @@ function GoalDiscoveryModal({ isOpen, onClose, onApply }) {
           </div>
         </div>
       </Card>
-    </div>
+    </div>,
+    document.body
   );
 }
 

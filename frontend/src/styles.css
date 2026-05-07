@@ -4944,6 +4944,11 @@ th {
 /* Goal Discovery UI */
 .goal-modal-backdrop {
   z-index: 2100 !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: center;
+  overflow-y: auto;
+  padding: clamp(16px, 5vh, 48px) 20px 20px;
 }
 
 .goal-discovery-modal {
