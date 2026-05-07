@@ -438,6 +438,7 @@ function Navbar({ theme, setTheme, active, userName }) {
 function Router({ path, onAddFund }) {
   if (path === '/dashboard') return <DashboardPage />;
   if (path.startsWith('/analysis/')) return <AnalysisDetailPage path={path} />;
+  if (path === '/portfolio/analysis') return <PortfolioAnalysisPage />;
   if (path === '/portfolio') return <PortfolioPage onAddFund={onAddFund} />;
   if (path === '/explore') return <ExplorePage onAddFund={onAddFund} />;
   if (path === '/calculator/lumpsum') return <LumpsumCalculatorPage />;
@@ -1701,7 +1702,7 @@ function PortfolioPage({ onAddFund }) {
           <h2>You are losing {formatInr(results.totalLoss)} across {results.regularCount} Regular funds</h2>
         </div>
         <div className="button-row">
-          <Button variant="secondary">Analyze All</Button>
+          <Button variant="secondary" onClick={() => navigate('/portfolio/analysis')}>Analyze All</Button>
           <Button>Fix Priority Funds</Button>
         </div>
       </Card>
@@ -1713,6 +1714,431 @@ function PortfolioPage({ onAddFund }) {
       <div className="portfolio-list">
         {sorted.map((fund) => <PortfolioCard key={fund.id} fund={fund} onView={() => openFund(fund)} onRemove={() => removeFromPortfolio(fund.baseFundId)} />)}
       </div>
+    </section>
+  );
+}
+
+// ─── Portfolio Intelligence Report Page ──────────────────────────────────────
+function PortfolioAnalysisPage() {
+  const { results, setSelectedFundId, user } = useAppState();
+  const [aiInsights, setAiInsights] = useState([]);
+  const [aiLoading, setAiLoading] = useState(true);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatDraft, setChatDraft] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatStatus, setChatStatus] = useState('');
+  const chatEndRef = React.useRef(null);
+
+  const funds = results?.funds || [];
+  const totalInvested = results?.totalInvested || 0;
+  const totalLoss = results?.totalLoss || 0;
+  const regularCount = results?.regularCount || 0;
+  const ratioSummary = results?.ratioSummary || {};
+
+  // Health score: penalise for regular plans and high expense
+  const healthScore = Math.max(0, Math.min(100,
+    100 - (regularCount / Math.max(1, funds.length)) * 40
+        - Math.min(40, totalLoss / Math.max(1, totalInvested) * 1000)
+  ));
+  const scoreClass = healthScore >= 70 ? 'score-good' : healthScore >= 40 ? 'score-warn' : 'score-poor';
+  const circumference = 2 * Math.PI * 40;
+  const dashArray = `${(healthScore / 100) * circumference} ${circumference}`;
+
+  // Priority list sorted by lifetime loss
+  const priorityFunds = [...funds].sort((a, b) => b.lifetimeLoss - a.lifetimeLoss).slice(0, 5);
+
+  // Max annual cost for bar chart scale
+  const maxAnnualCost = Math.max(1, ...funds.map(f => f.regularAnnualCost || 0));
+
+  // Auto-generate AI insights on mount
+  useEffect(() => {
+    if (!funds.length) { setAiLoading(false); return; }
+    (async () => {
+      try {
+        const res = await axios.post(`${API_URL}/portfolio/insights/ai`, {
+          portfolioData: results,
+          userPreferences: { risk: user?.preferences?.risk, goal: user?.preferences?.goal }
+        });
+        setAiInsights(Array.isArray(res.data) ? res.data : []);
+      } catch {
+        setAiInsights([]);
+      } finally {
+        setAiLoading(false);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
+
+  async function sendChat() {
+    const query = chatDraft.trim();
+    if (!query || chatLoading) return;
+    setChatDraft('');
+    setChatMessages(prev => [...prev, { role: 'user', text: query }]);
+    setChatLoading(true);
+    setChatStatus('Thinking...');
+    try {
+      const response = await fetch(`${API_URL}/copilot/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          message: query,
+          context: { page: 'Portfolio Analysis', results, selectedFund: null }
+        })
+      });
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let finalResponse = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        for (const line of chunk.split('\n')) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'status') setChatStatus(data.status);
+              else if (data.type === 'final') finalResponse = data.response;
+            } catch { /* partial */ }
+          }
+        }
+      }
+      const text = typeof finalResponse === 'string'
+        ? finalResponse
+        : (finalResponse?.summary || finalResponse?.blocks?.[0]?.text || 'Done.');
+      setChatMessages(prev => [...prev, { role: 'assistant', text }]);
+    } catch (e) {
+      setChatMessages(prev => [...prev, { role: 'assistant', text: 'Sorry, the AI is unavailable right now. Please try again.' }]);
+    } finally {
+      setChatLoading(false);
+      setChatStatus('');
+    }
+  }
+
+  function insightIcon(type) {
+    if (type === 'positive') return <CircleCheckBig size={15} />;
+    if (type === 'critical') return <Flame size={15} />;
+    return <Info size={15} />;
+  }
+
+  function ratioBadgeClass(label) {
+    if (!label) return 'moderate';
+    const l = label.toLowerCase();
+    if (l.includes('good') || l.includes('lower')) return 'good';
+    if (l.includes('poor') || l.includes('higher')) return 'poor';
+    return 'moderate';
+  }
+
+  if (!funds.length) {
+    return (
+      <section className="stack">
+        <EmptyState
+          title="No portfolio to analyze"
+          description="Add funds to your portfolio first, then come back here for a full intelligence report."
+          actionText="Go to Portfolio"
+          onAction={() => navigate('/portfolio')}
+        />
+      </section>
+    );
+  }
+
+  return (
+    <section className="analysis-page">
+
+      {/* ── Report Header ── */}
+      <Card className="report-hero">
+        <div className="report-hero-text">
+          <span className="report-eyebrow"><FileSearch size={13} /> Portfolio Intelligence Report</span>
+          <h1>Direct vs Regular Plan Analysis</h1>
+          <p>
+            A full cost audit of your {funds.length} fund{funds.length !== 1 ? 's' : ''}.
+            Compare Direct and Regular variants side-by-side and see exactly where your money is going.
+          </p>
+          <div className="report-hero-meta">
+            <span className={`report-meta-badge ${totalLoss > 0 ? 'danger' : 'good'}`}>
+              <TrendingDown size={12} /> {formatInr(totalLoss)} estimated lifetime drag
+            </span>
+            <span className={`report-meta-badge ${regularCount > 0 ? 'danger' : 'good'}`}>
+              <AlertCircle size={12} /> {regularCount} Regular plan{regularCount !== 1 ? 's' : ''} detected
+            </span>
+            <span className="report-meta-badge">
+              <Scale size={12} /> Generated {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+          </div>
+        </div>
+        <div className="health-score-ring-wrap">
+          <div className="hs-ring">
+            <svg viewBox="0 0 100 100">
+              <circle className="hs-bg" cx="50" cy="50" r="40" />
+              <circle className={`hs-fill ${scoreClass}`} cx="50" cy="50" r="40"
+                strokeDasharray={dashArray}
+                strokeDashoffset="0"
+              />
+            </svg>
+            <div className="hs-label">
+              <strong>{Math.round(healthScore)}</strong>
+              <span>/100</span>
+            </div>
+          </div>
+          <span>Health Score</span>
+        </div>
+      </Card>
+
+      {/* ── AI Copilot Panel ── */}
+      <Card className="analysis-copilot-card">
+        <div className="copilot-header">
+          <div className="copilot-header-left">
+            <div className="copilot-icon-wrap"><Sparkles size={17} /></div>
+            <div>
+              <h3>AI Portfolio Advisor</h3>
+              <p>Powered by Gemini · Analysing your {funds.length} holdings</p>
+            </div>
+          </div>
+          {aiLoading && (
+            <span className="copilot-generating-badge">
+              <Loader2 size={13} className="animate-spin" /> Generating insights...
+            </span>
+          )}
+        </div>
+
+        {/* Auto-generated insights */}
+        <div className="ai-insights-list">
+          {aiLoading ? (
+            [1, 2, 3].map(i => (
+              <div key={i} className="ai-insight-item" style={{ opacity: 0.4, animationDelay: `${i * 0.12}s` }}>
+                <div className="ai-insight-icon"><Loader2 size={14} className="animate-spin" /></div>
+                <div className="ai-insight-body"><strong>Analysing...</strong><p>Gemini is reviewing your portfolio data.</p></div>
+              </div>
+            ))
+          ) : aiInsights.length > 0 ? (
+            aiInsights.map((ins, i) => (
+              <div key={i} className={`ai-insight-item ${ins.type}`} style={{ animationDelay: `${i * 0.1}s` }}>
+                <div className="ai-insight-icon">{insightIcon(ins.type)}</div>
+                <div className="ai-insight-body">
+                  <strong>{ins.title}</strong>
+                  <p>{ins.description}</p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="ai-insight-item info">
+              <div className="ai-insight-icon"><Info size={14} /></div>
+              <div className="ai-insight-body">
+                <strong>AI analysis unavailable</strong>
+                <p>The AI advisor is currently rate-limited. Use the chat below to ask specific questions.</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Follow-up chat */}
+        {chatMessages.length > 0 && (
+          <div className="copilot-chat-area">
+            {chatMessages.map((msg, i) => (
+              <div key={i} className={`copilot-chat-bubble ${msg.role}`}>
+                <div className={`bubble-avatar ${msg.role === 'user' ? 'user-av' : ''}`}>
+                  {msg.role === 'user' ? 'You' : <Sparkles size={12} />}
+                </div>
+                <div className="bubble-text">{msg.text}</div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div className="copilot-chat-bubble">
+                <div className="bubble-avatar"><Sparkles size={12} /></div>
+                <div className="bubble-text" style={{ color: 'var(--muted)' }}>
+                  <Loader2 size={13} className="animate-spin" style={{ marginRight: 6 }} />{chatStatus || 'Thinking...'}
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+        )}
+
+        <div className="copilot-input-row">
+          <input
+            placeholder="Ask the AI: Should I switch HDFC to Direct? What's my total fee drain?"
+            value={chatDraft}
+            onChange={e => setChatDraft(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && sendChat()}
+            disabled={chatLoading}
+          />
+          <button className="copilot-send-btn" onClick={sendChat} disabled={chatLoading || !chatDraft.trim()}>
+            <Send size={15} />
+          </button>
+        </div>
+      </Card>
+
+      {/* ── Direct vs Regular Comparison ── */}
+      <p className="report-section-label"><Scale size={13} /> Direct vs Regular Comparison</p>
+      <div className="comparison-grid">
+        {funds.map(fund => {
+          const annualSaving = fund.annualExpenseGap || 0;
+          const projSaving = fund.lifetimeLoss || 0;
+          const directFV = fund.switchedFV || fund.currentFV || 0;
+          const regularFV = fund.currentFV || 0;
+          const years = fund.years || 10;
+          return (
+            <Card key={fund.id} className="comparison-card">
+              <div className="comparison-card-header">
+                <div className="comparison-fund-name">
+                  <h3>{fund.fundName || fund.inputName}</h3>
+                  <p>{fund.category} · {fund.currentPlan} Plan · Invested {formatInr(fund.amount)}</p>
+                </div>
+                <RecommendationBadge value={fund.recommendation} />
+              </div>
+              <div className="comparison-card-body">
+                <div className="comparison-col direct-col">
+                  <p className="comparison-col-label direct">✓ Direct Plan</p>
+                  <div className="comp-metric">
+                    <span className="cm-label">Expense Ratio</span>
+                    <span className="cm-value good">{formatPercent(fund.suggestedExpense)}</span>
+                  </div>
+                  <div className="comp-metric">
+                    <span className="cm-label">Annual Cost</span>
+                    <span className="cm-value good">{formatInr(fund.directAnnualCost)}</span>
+                  </div>
+                  <div className="comp-metric">
+                    <span className="cm-label">{years}Y Projection</span>
+                    <span className="cm-value good">{formatInr(Math.round(directFV))}</span>
+                  </div>
+                </div>
+                <div className="comparison-col regular-col">
+                  <p className="comparison-col-label regular">✕ Regular Plan</p>
+                  <div className="comp-metric">
+                    <span className="cm-label">Expense Ratio</span>
+                    <span className="cm-value danger">{formatPercent(fund.currentExpense)}</span>
+                  </div>
+                  <div className="comp-metric">
+                    <span className="cm-label">Annual Cost</span>
+                    <span className="cm-value danger">{formatInr(fund.regularAnnualCost)}</span>
+                  </div>
+                  <div className="comp-metric">
+                    <span className="cm-label">{years}Y Projection</span>
+                    <span className="cm-value danger">{formatInr(Math.round(regularFV))}</span>
+                  </div>
+                </div>
+                <div className="comparison-col diff-col">
+                  <p className="comparison-col-label diff">Difference</p>
+                  <div className="comp-metric">
+                    <span className="cm-label">Expense Gap</span>
+                    <span className="cm-value save">−{formatPercent(fund.expenseDiff ?? Math.max(0, fund.currentExpense - fund.suggestedExpense))}</span>
+                  </div>
+                  <div className="comp-metric">
+                    <span className="cm-label">Save / Year</span>
+                    <span className="cm-value save">{formatInr(annualSaving)}</span>
+                  </div>
+                  <div className="comp-metric">
+                    <span className="cm-label">Lifetime Drag</span>
+                    <span className="cm-value danger">{formatInr(Math.round(projSaving))}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="comparison-action-row">
+                <span className="rec-label">Recommendation: <strong>{fund.recommendation}</strong></span>
+                <Button variant="secondary" onClick={() => { setSelectedFundId(fund.baseFundId); navigate(`/fund/${fund.baseFundId}`); }}>
+                  View Fund <ArrowRight size={14} />
+                </Button>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* ── Cost Drag Bar Chart ── */}
+      <p className="report-section-label"><TrendingDown size={13} /> Annual Cost Drain by Fund</p>
+      <Card className="cost-drag-chart">
+        <div className="cost-drag-legend">
+          <span className="legend-dot direct">Direct plan cost</span>
+          <span className="legend-dot regular">Regular plan cost</span>
+        </div>
+        {funds.map(fund => {
+          const directW = Math.round(((fund.directAnnualCost || 0) / maxAnnualCost) * 100);
+          const regularW = Math.round(((fund.regularAnnualCost || 0) / maxAnnualCost) * 100);
+          return (
+            <div key={fund.id} className="cost-drag-item">
+              <span className="cost-drag-name" title={fund.fundName}>{fund.fundName}</span>
+              <div className="cost-drag-bar-wrap">
+                <div className="cost-drag-bar-regular" style={{ width: `${regularW}%` }} />
+                <div className="cost-drag-bar-direct" style={{ width: `${directW}%` }} />
+              </div>
+              <span className="cost-drag-value">{formatInr(fund.annualExpenseGap || 0)}/yr</span>
+            </div>
+          );
+        })}
+      </Card>
+
+      {/* ── Priority Action List ── */}
+      <p className="report-section-label"><Flame size={13} /> Priority Actions</p>
+      <div className="priority-action-list">
+        {priorityFunds.map((fund, i) => (
+          <button
+            key={fund.id}
+            className="priority-action-item"
+            onClick={() => { setSelectedFundId(fund.baseFundId); navigate(`/fund/${fund.baseFundId}`); }}
+          >
+            <span className={`priority-rank rank-${Math.min(i + 1, 3)}`}>{i + 1}</span>
+            <div className="priority-info">
+              <strong>{fund.fundName || fund.inputName}</strong>
+              <span>
+                {fund.currentPlan === 'Direct' ? 'Already on Direct — hold' : `Switch to Direct · save ${formatPercent(fund.currentExpense - fund.suggestedExpense)}/yr`}
+              </span>
+            </div>
+            <span className="priority-saving">
+              {fund.lifetimeLoss > 0 ? `−${formatInr(fund.lifetimeLoss)}` : '✓ Optimized'}
+            </span>
+            <ArrowRight size={15} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+          </button>
+        ))}
+      </div>
+
+      {/* ── Risk Ratios Table ── */}
+      {ratioSummary.sharpe && (
+        <>
+          <p className="report-section-label"><ChartNoAxesCombined size={13} /> Portfolio Risk Ratios</p>
+          <Card className="ratio-table-card">
+            <table className="ratio-table">
+              <thead>
+                <tr>
+                  <th>Ratio</th>
+                  <th>Value</th>
+                  <th>Assessment</th>
+                  <th>What it means</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><div className="ratio-name">Sharpe Ratio</div><div className="ratio-desc">Risk-adjusted return</div></td>
+                  <td><span className="ratio-value">{ratioSummary.sharpe.value?.toFixed(2) ?? '—'}</span></td>
+                  <td><span className={`ratio-badge ${ratioBadgeClass(ratioSummary.sharpe.label)}`}>{ratioSummary.sharpe.label}</span></td>
+                  <td style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>Above 0.5 is healthy. Higher = better return per unit of risk.</td>
+                </tr>
+                <tr>
+                  <td><div className="ratio-name">Sortino Ratio</div><div className="ratio-desc">Downside risk adjusted</div></td>
+                  <td><span className="ratio-value">{ratioSummary.sortino.value?.toFixed(2) ?? '—'}</span></td>
+                  <td><span className={`ratio-badge ${ratioBadgeClass(ratioSummary.sortino.label)}`}>{ratioSummary.sortino.label}</span></td>
+                  <td style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>Measures return relative to downside volatility only.</td>
+                </tr>
+                <tr>
+                  <td><div className="ratio-name">Beta</div><div className="ratio-desc">Market sensitivity</div></td>
+                  <td><span className="ratio-value">{ratioSummary.beta.value?.toFixed(2) ?? '—'}</span></td>
+                  <td><span className={`ratio-badge ${ratioBadgeClass(ratioSummary.beta.label)}`}>{ratioSummary.beta.label}</span></td>
+                  <td style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>Beta = 1 moves with market. {'<'}1 is less volatile, {'>'}1 more volatile.</td>
+                </tr>
+              </tbody>
+            </table>
+          </Card>
+        </>
+      )}
+
+      {/* ── Back ── */}
+      <div>
+        <Button variant="secondary" onClick={() => navigate('/portfolio')}>
+          ← Back to Portfolio
+        </Button>
+      </div>
+
     </section>
   );
 }

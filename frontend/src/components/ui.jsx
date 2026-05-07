@@ -104,6 +104,17 @@ export function PortfolioCard({ fund, onView, onRemove }) {
 }
 
 export function FundCard({ fund, onView, onToggleWatch, onAdd, watched }) {
+  // Normalize variants — backend can return array (enriched catalog) or object (universal/DB funds)
+  const directVariant = Array.isArray(fund.variants)
+    ? fund.variants.find(v => v.variant === 'direct')
+    : fund.variants?.direct;
+  const regularVariant = Array.isArray(fund.variants)
+    ? fund.variants.find(v => v.variant === 'regular')
+    : fund.variants?.regular;
+
+  const directExpense = fund.directExpense ?? directVariant?.expenseRatio;
+  const regularExpense = fund.regularExpense ?? regularVariant?.expenseRatio;
+
   return (
     <Card className="fund-card">
       <div className="fund-card-top">
@@ -119,16 +130,16 @@ export function FundCard({ fund, onView, onToggleWatch, onAdd, watched }) {
       </div>
       <div className="fund-stats">
         <Metric 
-          label="5Y return" 
-          value={fund.fiveYearReturn ? `${fund.fiveYearReturn.toFixed(1)}%` : 'Explore history'} 
+          label="5Y Return" 
+          value={fund.fiveYearReturn ? `${fund.fiveYearReturn.toFixed(1)}%` : '—'} 
         />
         <Metric 
-          label="Direct expense" 
-          value={formatPercent(fund.directExpense || fund.variants?.direct?.expenseRatio)} 
+          label="Expense Ratio" 
+          value={formatPercent(directExpense)} 
         />
         <Metric 
-          label="Regular expense" 
-          value={formatPercent(fund.regularExpense || fund.variants?.regular?.expenseRatio)} 
+          label="Regular Plan Cost" 
+          value={formatPercent(regularExpense)} 
         />
         <Metric label="Risk" value={fund.risk || fund.riskLabel || 'Moderate'} />
       </div>
