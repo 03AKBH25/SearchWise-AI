@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-1.5-flash-latest';
+const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-flash-latest';
 
 const SYSTEM_INSTRUCTION = `
 ROLE:
@@ -91,6 +91,13 @@ Generate 3 balanced insights. Return ONLY the JSON array.
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
+    
+    // Check if response was blocked by safety filters
+    if (!response.candidates || response.candidates.length === 0 || response.candidates[0].finishReason === 'SAFETY') {
+      console.warn('AI Insights: Response blocked by safety filters');
+      return [];
+    }
+
     const text = response.text();
     
     // Robust JSON extraction
@@ -102,7 +109,11 @@ Generate 3 balanced insights. Return ONLY the JSON array.
     
     return [];
   } catch (error) {
-    console.error('AI Insight Generation Error:', error.message);
+    if (error?.status === 429 || error?.message?.includes('429')) {
+      console.warn('AI Insights: Rate limit reached (429)');
+    } else {
+      console.error('AI Insight Generation Error:', error.message);
+    }
     return [];
   }
 }

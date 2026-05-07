@@ -578,8 +578,9 @@ function parseJsonResponse(text, userMessage, context) {
     for (const field of fields) {
       if (typeof parsed[field] === 'string' && parsed[field].trim().startsWith('{')) {
         const nested = extractJsonObject(parsed[field]);
-        if (nested?.insight || nested?.evidence || nested?.action) parsed = { ...parsed, ...nested };
-        else return normalizeCopilotResponse(fallbackResponse(userMessage, context));
+        if (nested?.insight || nested?.evidence || nested?.action || nested?.blocks) {
+          parsed = { ...parsed, ...nested };
+        }
       }
     }
 
@@ -829,31 +830,51 @@ export async function getCopilotResponse(userMessage = '', context = {}, onProgr
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       let result = await chat.sendMessage(prompt);
-      let response = result.response;
+      const response = result.response;
       
+      // Check if response was blocked by safety filters
+      if (!response.candidates || response.candidates.length === 0 || response.candidates[0].finishReason === 'SAFETY') {
+        console.warn('[Copilot] AI response blocked by safety filters.');
+        return normalizeCopilotResponse(fallbackResponse(userMessage, context));
+      }
+
       const calls = response.functionCalls();
       if (calls && calls.length > 0) {
         console.log(`[Copilot] AI requested tool calls:`, calls.map(c => c.name));
-        const toolResults = {};
+        const toolResponses = [];
         
         for (const call of calls) {
           if (call.name === 'sync_latest_amfi_data') {
             if (onProgress) onProgress('Fetching latest mutual fund data from AMFI official sources...');
             const syncResult = await syncAmfiData();
-            toolResults[call.name] = syncResult;
+            toolResponses.push({
+              functionResponse: {
+                name: call.name,
+                response: syncResult
+              }
+            });
+          } else {
+            // Handle unknown tool calls
+            toolResponses.push({
+              functionResponse: {
+                name: call.name,
+                response: { success: false, message: 'Tool not found' }
+              }
+            });
           }
         }
         
         if (onProgress) onProgress('Processing synchronized data...');
         
-        // Send tool results back to the model
-        result = await chat.sendMessage([{
-          functionResponse: {
-            name: calls[0].name,
-            response: toolResults[calls[0].name]
-          }
-        }]);
-        response = result.response;
+        // Send ALL tool results back to the model in one message
+        result = await chat.sendMessage(toolResponses);
+        const finalResponse = result.response;
+        
+        if (!finalResponse.candidates || finalResponse.candidates.length === 0 || finalResponse.candidates[0].finishReason === 'SAFETY') {
+           return normalizeCopilotResponse(fallbackResponse(userMessage, context));
+        }
+
+        return parseJsonResponse(finalResponse.text(), userMessage, context);
       }
 
       return parseJsonResponse(response.text(), userMessage, context);
@@ -875,9 +896,8 @@ export async function getCopilotResponse(userMessage = '', context = {}, onProgr
   }
 
   // If we reach here, handle the error
-  console.error('Copilot final error:', lastError);
-  
   if (lastError?.status === 429 || lastError?.message?.includes('429')) {
+    console.warn('[Copilot] Rate limit reached (429).');
     return {
       type: 'answer',
       title: 'Copilot Capacity Reached',
@@ -890,6 +910,7 @@ export async function getCopilotResponse(userMessage = '', context = {}, onProgr
   }
   
   if (lastError?.status === 503 || lastError?.message?.includes('503')) {
+    console.warn('[Copilot] Service unavailable (503).');
     return {
       type: 'answer',
       title: 'AI Model Overloaded',
@@ -900,6 +921,7 @@ export async function getCopilotResponse(userMessage = '', context = {}, onProgr
       ]
     };
   }
-  
+
+  console.error('Copilot final error:', lastError);
   return normalizeCopilotResponse(fallbackResponse(userMessage, context));
 }

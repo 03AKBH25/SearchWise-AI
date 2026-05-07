@@ -106,11 +106,15 @@ app.post('/api/copilot/chat', async (req, res, next) => {
     res.setHeader('Connection', 'keep-alive');
 
     const response = await getCopilotResponse(message, context, (status) => {
-      res.write(`data: ${JSON.stringify({ type: 'status', status })}\n\n`);
+      if (res.writable) {
+        res.write(`data: ${JSON.stringify({ type: 'status', status })}\n\n`);
+      }
     });
 
-    res.write(`data: ${JSON.stringify({ type: 'final', response })}\n\n`);
-    res.end();
+    if (res.writable) {
+      res.write(`data: ${JSON.stringify({ type: 'final', response })}\n\n`);
+      res.end();
+    }
   } catch (error) {
     console.error('[Copilot Error]', error);
     // If headers already sent, we can't send a normal error JSON

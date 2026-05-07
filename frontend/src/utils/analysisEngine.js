@@ -173,8 +173,11 @@ export function analyzeHolding(holding, index = 0) {
   
   // Try to use latestNav for current value if units are available
   const latestNav = fund.latestNav || 0;
-  const currentValue = units > 0 
-    ? Math.round(units * latestNav) 
+  // Calculate units from amount if not provided manually
+  const effectiveUnits = units > 0 ? units : (latestNav > 0 ? amount / latestNav : 0);
+  
+  const currentValue = effectiveUnits > 0 
+    ? Math.round(effectiveUnits * latestNav) 
     : Number(holding.currentValue || amount);
 
   const currentExpense = currentPlan === 'Direct' ? fund.directExpense : fund.regularExpense;
@@ -191,7 +194,7 @@ export function analyzeHolding(holding, index = 0) {
     baseFundId: fund.id,
     inputName: holding.fundName,
     amount,
-    units,
+    units: effectiveUnits,
     currentValue,
     years,
     currentPlan,
