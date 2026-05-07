@@ -9,7 +9,12 @@ const fundSchema = new mongoose.Schema(
     nav: { type: Number, required: true },
     date: { type: String, required: true },
     normalized: { type: String, index: true },
-    variant: { type: String, enum: ['direct', 'regular'], index: true }
+    variant: { type: String, enum: ['direct', 'regular'], index: true },
+    // Pre-computed CAGR returns populated by ingest5YReturns script
+    fiveYearReturn:  { type: Number, default: null },
+    threeYearReturn: { type: Number, default: null },
+    oneYearReturn:   { type: Number, default: null },
+    returnsUpdatedAt: { type: Date, default: null }
   },
   { timestamps: true }
 );

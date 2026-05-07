@@ -29,10 +29,15 @@ export function mapBackendFundToLocal(f) {
     risk: f.riskLabel || f.risk || 'Moderate',
     directExpense: direct.expenseRatio || 0.6,
     regularExpense: regular.expenseRatio || 1.5,
-    expectedReturn: f.expectedGrossReturn ? f.expectedGrossReturn * 100 : 10,
-    oneYearReturn: f.oneYearReturn || 12,
-    threeYearReturn: f.threeYearReturn || 11,
-    fiveYearReturn: f.fiveYearReturn || 10.5,
+    // Use real CAGR if available (set by ingest5YReturns), else fall back to expectedGrossReturn
+    expectedReturn: f.fiveYearReturn
+      ? f.fiveYearReturn                                          // real 5Y CAGR
+      : f.expectedGrossReturn ? f.expectedGrossReturn * 100       // catalog gross return
+      : 10,                                                       // generic fallback
+    oneYearReturn:   f.oneYearReturn   || null,
+    threeYearReturn: f.threeYearReturn || null,
+    fiveYearReturn:  f.fiveYearReturn  || null,
+    returnsSource:   f.returnsSource   || 'Estimated',
     latestNav: direct.nav || f.latestNav,
     navDate: direct.navDate || f.navDate,
     benchmark: f.benchmark || 'NIFTY 50 TRI'

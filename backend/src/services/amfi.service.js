@@ -36,6 +36,9 @@ async function enrichFund(fund) {
     console.warn('DB enrich error:', error.message);
   }
 
+  // Find the direct variant DB record — it carries the real CAGR returns if the ingestion has run
+  const directDbRow = matches.find(m => m.variant === 'direct') || matches[0] || null;
+
   const variants = ['direct', 'regular'].map((key) => {
     const configured = fund.variants[key];
     const byName = normalize(configured.schemeName);
@@ -55,7 +58,19 @@ async function enrichFund(fund) {
     };
   });
 
-  return { ...fund, variants };
+  // Prefer real ingested CAGR over catalog static value
+  const realFiveYear  = directDbRow?.fiveYearReturn  ?? null;
+  const realThreeYear = directDbRow?.threeYearReturn ?? null;
+  const realOneYear   = directDbRow?.oneYearReturn   ?? null;
+
+  return {
+    ...fund,
+    variants,
+    fiveYearReturn:  realFiveYear  !== null ? realFiveYear  : fund.fiveYearReturn,
+    threeYearReturn: realThreeYear !== null ? realThreeYear : fund.threeYearReturn,
+    oneYearReturn:   realOneYear   !== null ? realOneYear   : fund.oneYearReturn,
+    returnsSource:   realFiveYear  !== null ? 'AMFI Historical (mfapi)' : 'Catalog estimate'
+  };
 }
 
 export async function searchFunds(query = '', filters = {}, limit = 9) {
@@ -160,7 +175,8 @@ export async function searchFunds(query = '', filters = {}, limit = 9) {
 
 
       // Seeded believable values — deterministic per slug so refreshes never flicker
-      const fiveYearReturn = (
+      // These are FALLBACKS used only until the ingest5YReturns script has run.
+      const seededReturn = (
         assetClass === 'Debt'     ? seedNum(slug, 6.0,  9.5) :
         assetClass === 'Hybrid'   ? seedNum(slug, 11.0, 17.0) :
         category === 'Small Cap'  ? seedNum(slug, 25.0, 39.0) :
@@ -168,8 +184,14 @@ export async function searchFunds(query = '', filters = {}, limit = 9) {
         category === 'Large Cap'  ? seedNum(slug, 12.5, 19.5) :
         category === 'Index Fund' ? seedNum(slug, 13.5, 20.0) :
         category === 'ELSS'       ? seedNum(slug, 15.0, 26.0) :
-                                    seedNum(slug, 14.0, 25.0)   // Flexi Cap / generic Equity
+                                    seedNum(slug, 14.0, 25.0)
       );
+
+      // Prefer real CAGR from the DB document (set by ingest5YReturns.mjs)
+      const fiveYearReturn  = (direct?.fiveYearReturn  != null) ? direct.fiveYearReturn  : seededReturn;
+      const threeYearReturn = (direct?.threeYearReturn != null) ? direct.threeYearReturn : null;
+      const oneYearReturn   = (direct?.oneYearReturn   != null) ? direct.oneYearReturn   : null;
+      const returnsSource   = (direct?.fiveYearReturn  != null) ? 'AMFI Historical (mfapi)' : 'Estimated';
 
       // Vary expense within realistic band per category; different seeds for direct vs regular
       const directExpenseVaried  = seedNum(slug,          estimatedDirectExpense  * 0.80, estimatedDirectExpense  * 1.20, 2);
@@ -189,6 +211,9 @@ export async function searchFunds(query = '', filters = {}, limit = 9) {
         aumCrore: 0,
         riskLabel,
         fiveYearReturn,
+        threeYearReturn,
+        oneYearReturn,
+        returnsSource,
         exposure: { equity: assetClass === 'Equity' ? 95 : assetClass === 'Debt' ? 0 : 50, debt: assetClass === 'Debt' ? 95 : 0, cash: 5, largeCap: 50, midCap: 0, smallCap: 0, sectors: [] },
         variants: {
           direct: {
