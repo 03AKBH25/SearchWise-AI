@@ -3,7 +3,10 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+
+// Simple in-memory rate-limit cooldown: don't retry for 60 seconds after a 429
+let rateLimitCooldownUntil = 0;
 
 const SYSTEM_INSTRUCTION = `
 ROLE:
@@ -69,6 +72,12 @@ export async function generatePortfolioAIInsights(portfolioData, userPreferences
     return [];
   }
 
+  // Skip if we're in a rate-limit cooldown
+  if (Date.now() < rateLimitCooldownUntil) {
+    console.warn('AI Insights: Skipping due to rate-limit cooldown');
+    return [];
+  }
+
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ 
@@ -110,7 +119,8 @@ Generate 3 balanced insights. Return ONLY the JSON array.
     return [];
   } catch (error) {
     if (error?.status === 429 || error?.message?.includes('429')) {
-      console.warn('AI Insights: Rate limit reached (429)');
+      rateLimitCooldownUntil = Date.now() + 60_000; // Back off for 60 seconds
+      console.warn('AI Insights: Rate limit reached (429). Cooling down for 60s.');
     } else {
       console.error('AI Insight Generation Error:', error.message);
     }

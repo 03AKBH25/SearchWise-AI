@@ -80,17 +80,17 @@ app.get('/api/funds/search', async (req, res, next) => {
   }
 });
 
-app.get('/api/funds/:slug', async (req, res, next) => {
+app.post('/api/funds/recommend', async (req, res, next) => {
   try {
-    res.json(await getFundPair(req.params.slug));
+    res.json(await discoverFunds(req.body));
   } catch (error) {
     next(error);
   }
 });
 
-app.post('/api/funds/recommend', async (req, res, next) => {
+app.get('/api/funds/:slug', async (req, res, next) => {
   try {
-    res.json(await discoverFunds(req.body));
+    res.json(await getFundPair(req.params.slug));
   } catch (error) {
     next(error);
   }
