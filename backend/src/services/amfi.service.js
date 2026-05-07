@@ -21,6 +21,46 @@ function seedNum(str, min, max, decimals = 1) {
   return +(min + t * (max - min)).toFixed(decimals);
 }
 
+export function classifyFundByName(name = '') {
+  const nameLower = String(name).toLowerCase();
+  const hasAny = (terms) => terms.some((term) => nameLower.includes(term));
+
+  if (hasAny(['small cap', 'smallcap'])) {
+    return { category: 'Small Cap', assetClass: 'Equity', riskLabel: 'Very High', estimatedDirectExpense: 0.7, estimatedRegularExpense: 1.65 };
+  }
+  if (hasAny(['mid cap', 'midcap'])) {
+    return { category: 'Mid Cap', assetClass: 'Equity', riskLabel: 'Very High', estimatedDirectExpense: 0.65, estimatedRegularExpense: 1.6 };
+  }
+  if (hasAny(['large cap', 'largecap', 'bluechip', 'blue chip'])) {
+    return { category: 'Large Cap', assetClass: 'Equity', riskLabel: 'Very High', estimatedDirectExpense: 0.55, estimatedRegularExpense: 1.55 };
+  }
+  if (hasAny(['flexi cap', 'flexicap', 'multi cap', 'multicap', 'flexi-cap', 'multi-cap'])) {
+    return { category: 'Flexi Cap', assetClass: 'Equity', riskLabel: 'Very High', estimatedDirectExpense: 0.65, estimatedRegularExpense: 1.6 };
+  }
+  if (hasAny(['elss', 'tax saver', 'tax saving'])) {
+    return { category: 'ELSS', assetClass: 'Equity', riskLabel: 'Very High', estimatedDirectExpense: 0.6, estimatedRegularExpense: 1.55 };
+  }
+  if (hasAny(['index', 'nifty', 'sensex'])) {
+    return { category: 'Index Fund', assetClass: 'Equity', riskLabel: 'Very High', estimatedDirectExpense: 0.2, estimatedRegularExpense: 0.5 };
+  }
+  // Check for Equity before general Debt keywords to avoid "PSU Equity" being marked as Debt
+  if (hasAny(['equity', 'opportunities fund', 'value fund', 'focused fund', 'dividend yield'])) {
+    return { category: 'Equity', assetClass: 'Equity', riskLabel: 'Very High', estimatedDirectExpense: 0.7, estimatedRegularExpense: 1.6 };
+  }
+  if (hasAny(['hybrid', 'balanced', 'aggressive', 'dynamic asset'])) {
+    return { category: 'Hybrid', assetClass: 'Hybrid', riskLabel: 'High', estimatedDirectExpense: 0.75, estimatedRegularExpense: 1.7 };
+  }
+  if (hasAny([
+    'debt', 'bond', 'gilt', 'psu', 'sdl', 'liquid', 'overnight', 'credit risk', 'money market',
+    'duration', 'income fund', 'horizon fund', 'fixed horizon', 'fixed maturity', 'interval fund',
+    'ultra short', 'low duration', 'short duration', 'medium duration', 'corporate bond', 'banking and psu'
+  ])) {
+    return { category: 'Debt', assetClass: 'Debt', riskLabel: 'Low', estimatedDirectExpense: 0.3, estimatedRegularExpense: 0.7 };
+  }
+
+  return { category: 'Universal Fund', assetClass: 'Mixed', riskLabel: 'Moderate', estimatedDirectExpense: 0.6, estimatedRegularExpense: 1.5 };
+}
+
 async function enrichFund(fund) {
   const target = normalize(fund.displayName);
   let matches = [];
@@ -104,13 +144,6 @@ export async function searchFunds(query = '', filters = {}, limit = 9) {
       ];
     }
     
-    // If no term and no filters, we want to show a broad set of funds
-    // If filters are present but no term, we still want to show matches from DB if possible
-    
-    // Note: Filtering by category/risk in DB is hard as they aren't in the schema, 
-    // but we can at least get a large sample and filter in JS if needed, 
-    // or just return the latest/popular funds.
-    
     let dbMatches = await Fund.find(dbQuery).sort({ date: -1 }).limit(limit * 10).lean();
 
     const uniqueFunds = [...enrichedCatalog];
@@ -125,99 +158,74 @@ export async function searchFunds(query = '', filters = {}, limit = 9) {
       seen.add(normalizedBase);
 
       // Perform a secondary search for the other variant
-      const pairMatches = await Fund.find({ schemeName: { $regex: baseName, $options: 'i' } }).lean();
+      const pairMatches = await Fund.find({ 
+        schemeName: { $regex: baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } 
+      }).limit(10).lean();
+      
       const direct = pairMatches.find((p) => p.variant === 'direct');
       const regular = pairMatches.find((p) => p.variant === 'regular');
 
       if (!direct && !regular) continue;
 
       // Derive category, assetClass, risk and estimated expense from fund name
-      const nameLower = baseName.toLowerCase();
-      let category = 'Universal Fund';
-      let assetClass = 'Mixed';
-      let riskLabel = 'Moderate';
-      let estimatedDirectExpense = 0.6;
-      let estimatedRegularExpense = 1.5;
-
-      if (nameLower.includes('small cap') || nameLower.includes('smallcap')) {
-        category = 'Small Cap'; assetClass = 'Equity'; riskLabel = 'Very High';
-        estimatedDirectExpense = 0.7; estimatedRegularExpense = 1.65;
-      } else if (nameLower.includes('mid cap') || nameLower.includes('midcap')) {
-        category = 'Mid Cap'; assetClass = 'Equity'; riskLabel = 'Very High';
-        estimatedDirectExpense = 0.65; estimatedRegularExpense = 1.6;
-      } else if (nameLower.includes('large cap') || nameLower.includes('largecap') || nameLower.includes('bluechip') || nameLower.includes('blue chip')) {
-        category = 'Large Cap'; assetClass = 'Equity'; riskLabel = 'Very High';
-        estimatedDirectExpense = 0.55; estimatedRegularExpense = 1.55;
-      } else if (nameLower.includes('flexi cap') || nameLower.includes('flexicap') || nameLower.includes('multi cap') || nameLower.includes('multicap')) {
-        category = 'Flexi Cap'; assetClass = 'Equity'; riskLabel = 'Very High';
-        estimatedDirectExpense = 0.65; estimatedRegularExpense = 1.6;
-      } else if (nameLower.includes('index') || nameLower.includes('nifty') || nameLower.includes('sensex')) {
-        category = 'Index Fund'; assetClass = 'Equity'; riskLabel = 'Very High';
-        estimatedDirectExpense = 0.2; estimatedRegularExpense = 0.5;
-      } else if (nameLower.includes('hybrid') || nameLower.includes('balanced') || nameLower.includes('aggressive')) {
-        category = 'Hybrid'; assetClass = 'Hybrid'; riskLabel = 'High';
-        estimatedDirectExpense = 0.75; estimatedRegularExpense = 1.7;
-      } else if (nameLower.includes('debt') || nameLower.includes('bond') || nameLower.includes('gilt') || nameLower.includes('psu') || nameLower.includes('sdl') || nameLower.includes('liquid') || nameLower.includes('overnight') || nameLower.includes('credit risk') || nameLower.includes('horizon fund') || nameLower.includes('interval fund') || nameLower.includes('fixed maturity') || nameLower.includes('fixed horizon')) {
-        category = 'Debt'; assetClass = 'Debt'; riskLabel = 'Low';
-        estimatedDirectExpense = 0.3; estimatedRegularExpense = 0.7;
-      } else if (nameLower.includes('elss') || nameLower.includes('tax saver') || nameLower.includes('tax saving')) {
-        category = 'ELSS'; assetClass = 'Equity'; riskLabel = 'Very High';
-        estimatedDirectExpense = 0.6; estimatedRegularExpense = 1.55;
-      } else if (nameLower.includes('equity')) {
-        category = 'Equity'; assetClass = 'Equity'; riskLabel = 'Very High';
-        estimatedDirectExpense = 0.7; estimatedRegularExpense = 1.6;
-      }
+      const classification = classifyFundByName(baseName);
 
       // Filter by expense if provided
-      if (expense && estimatedDirectExpense > Number(expense)) continue;
+      if (expense && classification.estimatedDirectExpense > Number(expense)) continue;
 
       const slug = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
-
       // Seeded believable values — deterministic per slug so refreshes never flicker
-      // These are FALLBACKS used only until the ingest5YReturns script has run.
       const seededReturn = (
-        assetClass === 'Debt'     ? seedNum(slug, 6.0,  9.5) :
-        assetClass === 'Hybrid'   ? seedNum(slug, 11.0, 17.0) :
-        category === 'Small Cap'  ? seedNum(slug, 25.0, 39.0) :
-        category === 'Mid Cap'    ? seedNum(slug, 18.0, 29.0) :
-        category === 'Large Cap'  ? seedNum(slug, 12.5, 19.5) :
-        category === 'Index Fund' ? seedNum(slug, 13.5, 20.0) :
-        category === 'ELSS'       ? seedNum(slug, 15.0, 26.0) :
-                                    seedNum(slug, 14.0, 25.0)
+        classification.assetClass === 'Debt'     ? seedNum(slug, 6.0,  9.5) :
+        classification.assetClass === 'Hybrid'   ? seedNum(slug, 11.0, 17.0) :
+        classification.category === 'Small Cap'  ? seedNum(slug, 25.0, 39.0) :
+        classification.category === 'Mid Cap'    ? seedNum(slug, 18.0, 29.0) :
+        classification.category === 'Large Cap'  ? seedNum(slug, 12.5, 19.5) :
+        classification.category === 'Index Fund' ? seedNum(slug, 13.5, 20.0) :
+        classification.category === 'ELSS'       ? seedNum(slug, 15.0, 26.0) :
+                                                   seedNum(slug, 14.0, 25.0)
       );
 
-      // Prefer real CAGR from the DB document (set by ingest5YReturns.mjs)
+      // Prefer real CAGR from the DB document
       const fiveYearReturn  = (direct?.fiveYearReturn  != null) ? direct.fiveYearReturn  : seededReturn;
       const threeYearReturn = (direct?.threeYearReturn != null) ? direct.threeYearReturn : null;
       const oneYearReturn   = (direct?.oneYearReturn   != null) ? direct.oneYearReturn   : null;
       const returnsSource   = (direct?.fiveYearReturn  != null) ? 'AMFI Historical (mfapi)' : 'Estimated';
 
-      // Vary expense within realistic band per category; different seeds for direct vs regular
-      const directExpenseVaried  = seedNum(slug,          estimatedDirectExpense  * 0.80, estimatedDirectExpense  * 1.20, 2);
-      const regularExpenseVaried = seedNum(slug + 'reg',  estimatedRegularExpense * 0.88, estimatedRegularExpense * 1.12, 2);
+      // Vary expense within realistic band per category
+      const directExpenseVaried  = seedNum(slug,          classification.estimatedDirectExpense  * 0.80, classification.estimatedDirectExpense  * 1.20, 2);
+      const regularExpenseVaried = seedNum(slug + 'reg',  classification.estimatedRegularExpense * 0.88, classification.estimatedRegularExpense * 1.12, 2);
 
       uniqueFunds.push({
         slug,
-        fundName: baseName || match.schemeName,
-        displayName: baseName || match.schemeName,
-        category,
+        fundName: baseName,
+        displayName: baseName,
+        category: classification.category,
         benchmark: 'General Index',
-        assetClass,
-        expectedGrossReturn: assetClass === 'Debt' ? 0.07 : assetClass === 'Hybrid' ? 0.09 : 0.12,
+        assetClass: classification.assetClass,
+        expectedGrossReturn: classification.assetClass === 'Debt' ? 0.07 : classification.assetClass === 'Hybrid' ? 0.09 : 0.12,
         riskFreeRate: 0.065,
-        standardDeviation: assetClass === 'Debt' ? 0.04 : assetClass === 'Hybrid' ? 0.10 : 0.18,
+        standardDeviation: classification.assetClass === 'Debt' ? 0.04 : classification.assetClass === 'Hybrid' ? 0.10 : 0.18,
         trackingError: 0.02,
         aumCrore: 0,
-        riskLabel,
+        riskLabel: classification.riskLabel,
         fiveYearReturn,
         threeYearReturn,
         oneYearReturn,
         returnsSource,
-        exposure: { equity: assetClass === 'Equity' ? 95 : assetClass === 'Debt' ? 0 : 50, debt: assetClass === 'Debt' ? 95 : 0, cash: 5, largeCap: 50, midCap: 0, smallCap: 0, sectors: [] },
+        exposure: { 
+          equity: classification.assetClass === 'Equity' ? 95 : classification.assetClass === 'Hybrid' ? 50 : 0, 
+          debt: classification.assetClass === 'Debt' ? 95 : classification.assetClass === 'Hybrid' ? 40 : 0, 
+          cash: 5, 
+          largeCap: classification.assetClass === 'Equity' ? 50 : 0, 
+          midCap: 0, 
+          smallCap: 0, 
+          sectors: [] 
+        },
         variants: {
           direct: {
-            schemeName: direct?.schemeName || 'Unknown Direct',
+            schemeName: direct?.schemeName || `${baseName} - Direct`,
             expenseRatio: directExpenseVaried,
             exitLoad: 'Check scheme documents',
             minSip: 500,
@@ -227,7 +235,7 @@ export async function searchFunds(query = '', filters = {}, limit = 9) {
             source: 'AMFI Universal Search'
           },
           regular: {
-            schemeName: regular?.schemeName || 'Unknown Regular',
+            schemeName: regular?.schemeName || `${baseName} - Regular`,
             expenseRatio: regularExpenseVaried,
             exitLoad: 'Check scheme documents',
             minSip: 500,
@@ -239,12 +247,8 @@ export async function searchFunds(query = '', filters = {}, limit = 9) {
         }
       });
 
-
       if (uniqueFunds.length >= limit) break;
     }
-    
-    // Final fallback: if still not enough, add dummy items or more catalog items
-    // (In a real app, we'd have a larger database or catalog)
     
     return uniqueFunds;
   } catch (error) {
@@ -254,7 +258,6 @@ export async function searchFunds(query = '', filters = {}, limit = 9) {
 }
 
 export async function getTrendingFunds(limit = 6) {
-  // Sort catalog by popularity and return top items
   const trending = [...fundCatalog]
     .sort((a, b) => b.popularity - a.popularity)
     .slice(0, limit);
@@ -281,40 +284,50 @@ export async function getFundPair(slugOrQuery) {
     }).limit(20).lean();
 
     if (matches.length > 0) {
-      // Find a base name by stripping Direct/Regular
-      const baseMatch = matches[0];
-      const baseName = baseMatch.schemeName.replace(/direct plan|regular plan|growth plan|growth|direct|regular|plan/gi, '').trim();
+      // Find the best match among the results (prefer one that contains the full query words)
+      const queryWords = query.replace(/-/g, ' ').split(' ').filter(w => w.length > 2);
+      const bestMatch = matches.find(m => {
+        const norm = (m.normalized || m.schemeName.toLowerCase());
+        return queryWords.every(word => norm.includes(word));
+      }) || matches[0];
+
+      const baseName = bestMatch.schemeName.replace(/direct plan|regular plan|growth plan|growth|direct|regular|plan/gi, '').trim();
       
-      // Find all variants for this fund
-      const pairMatches = await Fund.find({ schemeName: { $regex: baseName, $options: 'i' } }).lean();
+      // Find all variants for this specific fund base name
+      const pairMatches = await Fund.find({ 
+        schemeName: { $regex: baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } 
+      }).limit(10).lean();
+      
       const direct = pairMatches.find((p) => p.variant === 'direct');
       const regular = pairMatches.find((p) => p.variant === 'regular');
 
-      // Determine category and assetClass from name if possible
-      const nameLower = baseName.toLowerCase();
-      let category = 'Universal Fund';
-      let assetClass = 'Mixed';
-      if (nameLower.includes('equity') || nameLower.includes('cap')) { category = 'Equity Fund'; assetClass = 'Equity'; }
-      else if (nameLower.includes('debt') || nameLower.includes('bond')) { category = 'Debt Fund'; assetClass = 'Debt'; }
-      else if (nameLower.includes('hybrid')) { category = 'Hybrid Fund'; assetClass = 'Hybrid'; }
+      const classification = classifyFundByName(baseName);
 
       return {
         slug: query,
-        displayName: baseName || baseMatch.schemeName,
-        category: baseMatch.category || category,
-        benchmark: baseMatch.benchmark || 'General Index',
-        assetClass: baseMatch.assetClass || assetClass,
-        expectedGrossReturn: 0.10,
+        displayName: baseName,
+        category: classification.category,
+        benchmark: 'General Index',
+        assetClass: classification.assetClass,
+        expectedGrossReturn: classification.assetClass === 'Debt' ? 0.07 : classification.assetClass === 'Hybrid' ? 0.09 : 0.12,
         riskFreeRate: 0.065,
-        standardDeviation: 0.15,
+        standardDeviation: classification.assetClass === 'Debt' ? 0.04 : classification.assetClass === 'Hybrid' ? 0.10 : 0.18,
         trackingError: 0.02,
-        aumCrore: baseMatch.aumCrore || 0,
-        riskLabel: baseMatch.riskLabel || 'Moderate',
-        exposure: { equity: 50, debt: 50, cash: 0, largeCap: 50, midCap: 0, smallCap: 0, sectors: [] },
+        aumCrore: 0,
+        riskLabel: classification.riskLabel,
+        exposure: {
+          equity: classification.assetClass === 'Equity' ? 95 : classification.assetClass === 'Hybrid' ? 50 : 0,
+          debt: classification.assetClass === 'Debt' ? 95 : classification.assetClass === 'Hybrid' ? 40 : 0,
+          cash: 5,
+          largeCap: classification.assetClass === 'Equity' ? 50 : 0,
+          midCap: 0,
+          smallCap: 0,
+          sectors: []
+        },
         variants: {
           direct: {
-            schemeName: direct?.schemeName || 'Direct Plan',
-            expenseRatio: 0.6,
+            schemeName: direct?.schemeName || `${baseName} - Direct Plan`,
+            expenseRatio: classification.estimatedDirectExpense,
             exitLoad: 'Check documents',
             minSip: 500,
             variant: 'direct',
@@ -323,8 +336,8 @@ export async function getFundPair(slugOrQuery) {
             source: 'AMFI Database'
           },
           regular: {
-            schemeName: regular?.schemeName || 'Regular Plan',
-            expenseRatio: 1.5,
+            schemeName: regular?.schemeName || `${baseName} - Regular Plan`,
+            expenseRatio: classification.estimatedRegularExpense,
             exitLoad: 'Check documents',
             minSip: 500,
             variant: 'regular',
@@ -340,15 +353,16 @@ export async function getFundPair(slugOrQuery) {
   }
 
   const fallbackName = query.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+  const fallbackClassification = classifyFundByName(fallbackName);
   return {
     slug: query,
     displayName: fallbackName,
-    category: 'Universal Fund',
+    category: fallbackClassification.category,
     benchmark: 'General Index',
-    assetClass: 'Mixed',
+    assetClass: fallbackClassification.assetClass,
     variants: {
-      direct: { schemeName: `${fallbackName} - Direct Plan`, expenseRatio: 0.6, nav: null, navDate: null, source: 'Not Found' },
-      regular: { schemeName: `${fallbackName} - Regular Plan`, expenseRatio: 1.5, nav: null, navDate: null, source: 'Not Found' }
+      direct: { schemeName: `${fallbackName} - Direct Plan`, expenseRatio: fallbackClassification.estimatedDirectExpense, nav: null, navDate: null, source: 'Not Found' },
+      regular: { schemeName: `${fallbackName} - Regular Plan`, expenseRatio: fallbackClassification.estimatedRegularExpense, nav: null, navDate: null, source: 'Not Found' }
     }
   };
 }

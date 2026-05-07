@@ -1,4 +1,4 @@
-import { getFundPair } from './amfi.service.js';
+import { classifyFundByName, getFundPair } from './amfi.service.js';
 
 function calculateSharpeRatio(returnValue = 0, riskFreeRate = 6.5, standardDeviation = 12) {
   const deviation = Math.max(0.1, Number(standardDeviation || 12));
@@ -60,9 +60,32 @@ function detectPlan(name) {
   return 'Regular';
 }
 
+function allocationImplication(equityPercent) {
+  if (equityPercent >= 80) return 'Equity-heavy allocation can increase long-term growth potential, but it may also bring higher volatility.';
+  if (equityPercent <= 20) return 'Debt-heavy allocation may reduce volatility, but growth potential can be lower than equity-oriented portfolios.';
+  return 'Mixed allocation can balance growth participation with some stability.';
+}
+
+function normalizeAssetClass(value) {
+  const text = normalize(value);
+  if (text.includes('equity')) return 'Equity';
+  if (text.includes('debt')) return 'Debt';
+  if (text.includes('hybrid')) return 'Hybrid';
+  if (text.includes('mixed')) return 'Mixed';
+  return 'Mixed';
+}
+
 export async function analyzeHolding(holding, index = 0) {
   // Use the AMFI service to get real fund data if possible
   const fundData = await getFundPair(holding.slug || holding.fundId || holding.fundName);
+  const inferred = classifyFundByName(`${holding.fundName || ''} ${holding.fundId || ''} ${fundData.displayName || ''} ${fundData.category || ''}`);
+  const resolvedCategory =
+    holding.category ||
+    (fundData.category && fundData.category !== 'Universal Fund' ? fundData.category : inferred.category);
+  const resolvedAssetClass =
+    holding.assetClass ||
+    (fundData.assetClass && fundData.assetClass !== 'Mixed' ? fundData.assetClass : inferred.assetClass);
+  const resolvedRiskLabel = holding.riskLabel || holding.risk || fundData.riskLabel || inferred.riskLabel;
   
   // Normalize variants to an array (sometimes it's an object from universal search)
   const variantsArray = Array.isArray(fundData.variants) 
@@ -81,10 +104,10 @@ export async function analyzeHolding(holding, index = 0) {
 
   const fund = {
     id: fundData.slug,
-    fundName: (fundData.displayName === 'Universal Fund' || fundData.category === 'Universal Fund') ? (holding.fundName || fundData.displayName) : fundData.displayName,
-    category: fundData.category,
-    assetClass: fundData.assetClass || (fundData.category === 'Debt' ? 'Debt' : fundData.category === 'Hybrid' ? 'Hybrid' : 'Equity'),
-    risk: fundData.riskLabel,
+    fundName: holding.fundName || fundData.displayName,
+    category: resolvedCategory,
+    assetClass: normalizeAssetClass(resolvedAssetClass),
+    risk: resolvedRiskLabel,
     directExpense: directVariant?.expenseRatio || 0.75,
     regularExpense: regularVariant?.expenseRatio || 1.65,
     expectedReturn: (fundData.expectedGrossReturn || 0.12) * 100, 
@@ -172,17 +195,18 @@ export async function analyzePortfolio(portfolio) {
   const totalReturns = currentValue - totalInvested;
   const highExpenseFunds = funds.filter((fund) => fund.currentExpense >= 1.4);
   
-  const allocation = ['Equity', 'Debt', 'Hybrid'].map((assetClass) => ({
+  const allocation = ['Equity', 'Debt', 'Hybrid', 'Mixed'].map((assetClass) => ({
     label: assetClass,
     value: funds
       .filter((fund) => fund.assetClass === assetClass)
       .reduce((sum, fund) => sum + fund.currentValue, 0)
-  }));
+  })).filter((item) => item.value > 0 || ['Equity', 'Debt', 'Hybrid'].includes(item.label));
   
   const allocationPercentages = allocation.map((item) => ({
     ...item,
     percent: currentValue ? Math.round((item.value / currentValue) * 100) : 0
   }));
+  const equityPercent = allocationPercentages.find((item) => item.label === 'Equity')?.percent || 0;
   
   const categoryMap = funds.reduce((map, fund) => {
     map[fund.category] = (map[fund.category] || 0) + fund.currentValue;
@@ -291,6 +315,7 @@ export async function analyzePortfolio(portfolio) {
     allocation,
     allocationPercentages,
     categoryDistribution,
+    allocationInsight: allocationImplication(equityPercent),
     weightedExpense,
     directExpense,
     latestNavDate,

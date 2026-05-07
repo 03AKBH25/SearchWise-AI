@@ -157,6 +157,31 @@ function allocationImplication(equityPercent) {
   return 'Mixed allocation can balance growth participation with some stability.';
 }
 
+function classifyFundByName(name = '') {
+  const text = normalize(name);
+  const hasAny = (terms) => terms.some((term) => text.includes(term));
+
+  if (hasAny(['hybrid', 'balanced', 'aggressive'])) return { category: 'Hybrid', assetClass: 'Hybrid', risk: 'High' };
+  if (hasAny(['debt', 'bond', 'gilt', 'psu', 'sdl', 'liquid', 'overnight', 'credit risk', 'money market', 'duration', 'income fund', 'horizon fund', 'fixed horizon', 'fixed maturity', 'interval fund', 'corporate bond', 'banking and psu'])) return { category: 'Debt', assetClass: 'Debt', risk: 'Low' };
+  if (hasAny(['small cap', 'smallcap'])) return { category: 'Small Cap', assetClass: 'Equity', risk: 'Very High' };
+  if (hasAny(['mid cap', 'midcap'])) return { category: 'Mid Cap', assetClass: 'Equity', risk: 'Very High' };
+  if (hasAny(['large cap', 'largecap', 'bluechip', 'blue chip'])) return { category: 'Large Cap', assetClass: 'Equity', risk: 'Very High' };
+  if (hasAny(['flexi cap', 'flexicap', 'multi cap', 'multicap'])) return { category: 'Flexi Cap', assetClass: 'Equity', risk: 'Very High' };
+  if (hasAny(['elss', 'tax saver', 'tax saving'])) return { category: 'ELSS', assetClass: 'Equity', risk: 'Very High' };
+  if (hasAny(['index', 'nifty', 'sensex', 'equity', 'opportunities fund', 'value fund', 'focused fund'])) return { category: 'Equity', assetClass: 'Equity', risk: 'Very High' };
+
+  return { category: 'Mixed', assetClass: 'Other', risk: 'Moderate' };
+}
+
+function normalizeAssetClass(value) {
+  const text = normalize(value);
+  if (text.includes('equity')) return 'Equity';
+  if (text.includes('debt')) return 'Debt';
+  if (text.includes('hybrid')) return 'Hybrid';
+  if (text.includes('mixed')) return 'Mixed';
+  return 'Mixed';
+}
+
 function recommendationFor(loss, amount, plan, expenseDiff) {
   if (plan === 'Direct') return 'Hold';
   if (loss > Math.max(18000, amount * 0.045) || expenseDiff >= 0.85) return 'Explore';
@@ -172,13 +197,21 @@ function statusFor(recommendation) {
 
 export function analyzeHolding(holding, index = 0) {
   const fund = findFund(holding.fundId || holding.fundName);
+  const inferred = classifyFundByName(`${holding.fundName || ''} ${holding.fundId || ''} ${fund.fundName || ''} ${fund.category || ''}`);
+  const resolvedFund = {
+    ...fund,
+    fundName: holding.fundName || fund.fundName,
+    category: holding.category || fund.category || inferred.category,
+    assetClass: normalizeAssetClass(holding.assetClass || fund.assetClass || inferred.assetClass),
+    risk: holding.riskLabel || holding.risk || fund.risk || inferred.risk
+  };
   const currentPlan = holding.plan || detectPlan(holding.fundName);
   const years = Number(holding.years || 10);
   const amount = Number(holding.amount || 0);
   const units = Number(holding.units || 0);
 
   // Try to use latestNav for current value if units are available
-  const latestNav = fund.latestNav || 0;
+  const latestNav = resolvedFund.latestNav || 0;
   // Calculate units from amount if not provided manually
   const effectiveUnits = units > 0 ? units : (latestNav > 0 ? amount / latestNav : 0);
 
@@ -186,19 +219,19 @@ export function analyzeHolding(holding, index = 0) {
     ? Math.round(effectiveUnits * latestNav)
     : Number(holding.currentValue || amount);
 
-  const currentExpense = currentPlan === 'Direct' ? fund.directExpense : fund.regularExpense;
-  const suggestedExpense = fund.directExpense;
-  const currentFV = futureValue(amount, fund.expectedReturn, currentExpense, years);
-  const directFV = futureValue(amount, fund.expectedReturn, suggestedExpense, years);
+  const currentExpense = currentPlan === 'Direct' ? resolvedFund.directExpense : resolvedFund.regularExpense;
+  const suggestedExpense = resolvedFund.directExpense;
+  const currentFV = futureValue(amount, resolvedFund.expectedReturn, currentExpense, years);
+  const directFV = futureValue(amount, resolvedFund.expectedReturn, suggestedExpense, years);
   const lifetimeLoss = Math.max(0, directFV - currentFV);
   const expenseDiff = Math.max(0, currentExpense - suggestedExpense);
   const recommendation = recommendationFor(lifetimeLoss, amount, currentPlan, expenseDiff);
 
   return {
-    ...fund,
-    id: `${fund.id}-${index}`,
-    baseFundId: fund.id,
-    holdingId: holding.fundId || fund.id,
+    ...resolvedFund,
+    id: `${resolvedFund.id}-${index}`,
+    baseFundId: resolvedFund.id,
+    holdingId: holding.fundId || resolvedFund.id,
     inputName: holding.fundName,
     amount,
     units: effectiveUnits,
@@ -208,20 +241,20 @@ export function analyzeHolding(holding, index = 0) {
     suggestedPlan: currentPlan === 'Direct' ? 'Stay Direct' : 'Direct',
     currentExpense,
     suggestedExpense,
-    latestNav: fund.latestNav,
-    navDate: fund.navDate,
-    benchmark: fund.benchmark,
-    benchmarkReturn: fund.benchmarkReturn,
-    benchmarkVolatility: fund.benchmarkVolatility,
-    aumCrore: fund.aumCrore,
-    standardDeviation: fund.standardDeviation,
-    downsideDeviation: fund.downsideDeviation,
-    correlation: fund.correlation,
-    beta: calculateBeta(fund.standardDeviation, fund.benchmarkVolatility, fund.correlation),
-    sharpeRatio: calculateSharpeRatio(fund.expectedReturn, fund.riskFreeRate, fund.standardDeviation),
-    sortinoRatio: calculateSortinoRatio(fund.expectedReturn, fund.riskFreeRate, fund.downsideDeviation),
+    latestNav: resolvedFund.latestNav,
+    navDate: resolvedFund.navDate,
+    benchmark: resolvedFund.benchmark,
+    benchmarkReturn: resolvedFund.benchmarkReturn,
+    benchmarkVolatility: resolvedFund.benchmarkVolatility,
+    aumCrore: resolvedFund.aumCrore,
+    standardDeviation: resolvedFund.standardDeviation,
+    downsideDeviation: resolvedFund.downsideDeviation,
+    correlation: resolvedFund.correlation,
+    beta: calculateBeta(resolvedFund.standardDeviation, resolvedFund.benchmarkVolatility, resolvedFund.correlation),
+    sharpeRatio: calculateSharpeRatio(resolvedFund.expectedReturn, resolvedFund.riskFreeRate, resolvedFund.standardDeviation),
+    sortinoRatio: calculateSortinoRatio(resolvedFund.expectedReturn, resolvedFund.riskFreeRate, resolvedFund.downsideDeviation),
     directAnnualCost: Math.round((amount * suggestedExpense) / 100),
-    regularAnnualCost: Math.round((amount * fund.regularExpense) / 100),
+    regularAnnualCost: Math.round((amount * resolvedFund.regularExpense) / 100),
     annualExpenseGap: Math.round((amount * expenseDiff) / 100),
     currentFV,
     switchedFV: directFV,
@@ -246,12 +279,12 @@ export function analyzePortfolio(portfolio) {
   const regularCount = funds.filter((fund) => fund.currentPlan === 'Regular').length;
   const totalReturns = currentValue - totalInvested;
   const highExpenseFunds = funds.filter((fund) => fund.currentExpense >= 1.4);
-  const allocation = ['Equity', 'Debt', 'Hybrid'].map((assetClass) => ({
+  const allocation = ['Equity', 'Debt', 'Hybrid', 'Mixed'].map((assetClass) => ({
     label: assetClass,
     value: funds
       .filter((fund) => fund.assetClass === assetClass)
       .reduce((sum, fund) => sum + fund.currentValue, 0)
-  }));
+  })).filter((item) => item.value > 0 || ['Equity', 'Debt', 'Hybrid'].includes(item.label));
   const allocationPercentages = allocation.map((item) => ({
     ...item,
     percent: currentValue ? Math.round((item.value / currentValue) * 100) : 0

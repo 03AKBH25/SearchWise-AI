@@ -105,8 +105,8 @@ export function AppStateProvider({ children }) {
     if (!isAuthenticated || isSyncing) return;
     
     // Check if the holdings are actually different to avoid redundant network calls
-    const newKey = newHoldings.map(h => `${h.fundId}:${h.amount}:${h.units}`).join('|');
-    const currentKey = portfolio.map(h => `${h.fundId}:${h.amount}:${h.units}`).join('|');
+    const newKey = newHoldings.map(h => `${h.fundId}:${h.fundName}:${h.amount}:${h.units}:${h.plan}:${h.category}:${h.assetClass}`).join('|');
+    const currentKey = portfolio.map(h => `${h.fundId}:${h.fundName}:${h.amount}:${h.units}:${h.plan}:${h.category}:${h.assetClass}`).join('|');
     
     // If it's the same as what we think we have, don't sync
     // (Note: this is a simple check, but portfolioKey below is more robust for analysis)
@@ -115,7 +115,7 @@ export function AppStateProvider({ children }) {
     try {
       const { data } = await axios.post(`${API_URL}/portfolio/sync`, { holdings: newHoldings });
       if (data && data.holdings) {
-        const serverKey = data.holdings.map(h => `${h.fundId}:${h.amount}:${h.units}`).join('|');
+        const serverKey = data.holdings.map(h => `${h.fundId}:${h.fundName}:${h.amount}:${h.units}:${h.plan}:${h.category}:${h.assetClass}`).join('|');
         if (serverKey !== newKey) {
           setPortfolio(data.holdings);
         }
@@ -144,7 +144,9 @@ export function AppStateProvider({ children }) {
       holding.amount || 0,
       holding.units || 0,
       holding.years || 0,
-      holding.plan || ''
+      holding.plan || '',
+      holding.category || '',
+      holding.assetClass || ''
     ].join(':')).join('|'),
     [portfolio]
   );

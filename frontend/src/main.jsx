@@ -301,7 +301,11 @@ function AppShell() {
             amount: configuredFund.amount,
             units: configuredFund.units,
             years: configuredFund.years,
-            plan: configuredFund.plan
+            plan: configuredFund.plan,
+            category: configuredFund.category,
+            assetClass: configuredFund.assetClass,
+            riskLabel: configuredFund.riskLabel || configuredFund.risk,
+            benchmark: configuredFund.benchmark
           };
           setPortfolio((current) => {
             const withoutDuplicate = current.filter((holding) => holding.fundId !== fundId);
@@ -1285,7 +1289,7 @@ function DashboardPage() {
               tooltip="Allocation shows how your portfolio is spread across equity, debt, and hybrid funds. Equity can bring more volatility."
               onClick={() => navigate('/analysis/allocation')}
             >
-              <AllocationMiniBar data={results.categoryDistribution} />
+              <AllocationMiniBar data={results.allocationPercentages} />
             </SummaryCard>
             <SummaryCard
               label="Current value"
@@ -1467,21 +1471,39 @@ function DashboardPage() {
 }
 
 function AllocationMiniBar({ data }) {
-  const allocationDetails = useMemo(() => {
-    const active = data.filter(a => a.percent > 0).sort((a, b) => b.percent - a.percent);
-    const top = active.slice(0, 5);
-    const text = top.map(a => `${a.percent}% ${a.label}`).join(', ');
-    return active.length > 5 ? `${text}...` : text;
+  const allocationItems = useMemo(() => {
+    const fallback = [
+      { label: 'Equity', value: 0, percent: 0 },
+      { label: 'Debt', value: 0, percent: 0 },
+      { label: 'Hybrid', value: 0, percent: 0 },
+      { label: 'Other', value: 0, percent: 0 }
+    ];
+    const source = Array.isArray(data) && data.length ? data : fallback;
+    return source
+      .filter((item) => item.percent > 0 || ['Equity', 'Debt', 'Hybrid', 'Other'].includes(item.label))
+      .sort((a, b) => b.percent - a.percent);
   }, [data]);
 
   return (
     <div className="allocation-mini-bar-group">
       <div className="allocation-mini-bar" aria-label="Mini allocation bar">
-        {data.map((item, index) => (
-          <span key={item.label} className={`allocation-slice slice-${index}`} style={{ width: `${Math.max(2, item.percent)}%` }} title={`${item.label}: ${item.percent}%`} />
+        {allocationItems.map((item) => (
+          <span
+            key={item.label}
+            className={`allocation-slice allocation-${item.label.toLowerCase()}`}
+            style={{ width: `${item.percent > 0 ? Math.max(2, item.percent) : 0}%` }}
+            title={`${item.label}: ${item.percent}%`}
+          />
         ))}
       </div>
-      <div className="allocation-labels">{allocationDetails}</div>
+      <div className="allocation-labels">
+        {allocationItems.map((item) => (
+          <span key={item.label} className="allocation-label-item">
+            <i className={`allocation-dot allocation-${item.label.toLowerCase()}`} />
+            {item.label} {item.percent}%
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1568,12 +1590,23 @@ function AnalysisDetailPage({ path }) {
           <Card className="panel">
             <SectionTitle title="What it implies" />
             <p className="muted-copy">{results.allocationInsight}</p>
+            <AllocationMiniBar data={results.allocationPercentages} />
             <div className="comparison-table-card">
               <table>
-                <thead><tr><th>Category</th><th>Value</th><th>Share</th><th>Risk meaning</th></tr></thead>
+                <thead><tr><th>Fund type</th><th>Value</th><th>Share</th><th>Risk meaning</th></tr></thead>
+                <tbody>
+                  {results.allocationPercentages.map((item) => (
+                    <tr key={item.label}><td>{item.label}</td><td>{formatInr(item.value)}</td><td>{item.percent}%</td><td>{item.percent > 40 ? 'Concentrated area to monitor' : 'Balanced within current mix'}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="comparison-table-card">
+              <table>
+                <thead><tr><th>Category detail</th><th>Value</th><th>Share</th></tr></thead>
                 <tbody>
                   {results.categoryDistribution.map((item) => (
-                    <tr key={item.label}><td>{item.label}</td><td>{formatInr(item.value)}</td><td>{item.percent}%</td><td>{item.percent > 40 ? 'Concentrated area to monitor' : 'Balanced within current mix'}</td></tr>
+                    <tr key={item.label}><td>{item.label}</td><td>{formatInr(item.value)}</td><td>{item.percent}%</td></tr>
                   ))}
                 </tbody>
               </table>

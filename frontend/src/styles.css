@@ -1062,15 +1062,23 @@ select:focus {
 .allocation-mini-bar {
   display: flex;
   width: 100%;
-  height: 8px;
+  height: 10px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--surface-2);
 }
 
-.allocation-mini-bar .slice-0 { background: var(--accent); }
-.allocation-mini-bar .slice-1 { background: var(--blue); }
-.allocation-mini-bar .slice-2 { background: var(--amber); }
+.allocation-slice {
+  min-width: 0;
+  transition: width 0.2s ease;
+}
+
+.allocation-equity { background: #127c66; }
+.allocation-debt { background: #2563eb; }
+.allocation-hybrid { background: #d97706; }
+.allocation-mixed { background: #64748b; }
+.allocation-universal { background: #64748b; }
+.allocation-other { background: #64748b; }
 
 .summary-card .summary-icon {
   display: grid;
@@ -4935,7 +4943,47 @@ th {
 }
 
 
-.allocation-mini-bar-group { display: grid; gap: 10px; margin-top: 4px; } .allocation-mini-bar { box-shadow: 0 0 10px rgba(18, 124, 102, 0.15); animation: bar-glow 3s infinite alternate ease-in-out; } @keyframes bar-glow { from { box-shadow: 0 0 4px rgba(18, 124, 102, 0.1); } to { box-shadow: 0 0 12px rgba(18, 124, 102, 0.25); } } .allocation-labels { font-family: 'Outfit', sans-serif; font-size: 0.78rem; font-weight: 500; color: var(--muted); } .summary-card.interactive-summary:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.15); background: linear-gradient(145deg, var(--surface), color-mix(in srgb, var(--surface-2) 40%, var(--surface))); }
+.allocation-mini-bar-group {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.allocation-mini-bar {
+  box-shadow: 0 0 10px rgba(18, 124, 102, 0.15);
+  animation: bar-glow 3s infinite alternate ease-in-out;
+}
+
+@keyframes bar-glow {
+  from { box-shadow: 0 0 4px rgba(18, 124, 102, 0.1); }
+  to { box-shadow: 0 0 12px rgba(18, 124, 102, 0.25); }
+}
+
+.allocation-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.allocation-label-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.allocation-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.summary-card.interactive-summary:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.15); background: linear-gradient(145deg, var(--surface), color-mix(in srgb, var(--surface-2) 40%, var(--surface))); }
 
 /* AI Insights UI */
 .ai-insights-section {

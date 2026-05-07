@@ -7,7 +7,11 @@ const holdingSchema = new mongoose.Schema({
   units: { type: Number, default: 0 },
   currentValue: { type: Number },
   years: { type: Number, default: 5 },
-  plan: { type: String, enum: ['Direct', 'Regular'], default: 'Regular' }
+  plan: { type: String, enum: ['Direct', 'Regular'], default: 'Regular' },
+  category: { type: String },
+  assetClass: { type: String },
+  riskLabel: { type: String },
+  benchmark: { type: String }
 });
 
 const portfolioSchema = new mongoose.Schema(
