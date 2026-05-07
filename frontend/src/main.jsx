@@ -1934,7 +1934,10 @@ function ExplorePage({ onAddFund }) {
                         <path className="ring-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                         <path className="ring-fill" strokeDasharray={`${candidate.fitScore}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                       </svg>
-                      <span className="score-text">{candidate.fitScore}%</span>
+                      <span className="score-text">
+                        <strong>{candidate.fitScore}%</strong>
+                        <small>match</small>
+                      </span>
                     </div>
                   </div>
                   <div className="match-info">

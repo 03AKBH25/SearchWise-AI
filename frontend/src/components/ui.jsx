@@ -1,9 +1,30 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight, Bot, Check, MessageSquare, Plus, Send, SlidersHorizontal, Star, TrendingUp, X } from 'lucide-react';
+import { ArrowRight, Bot, Check, MessageSquare, Plus, Send, SlidersHorizontal, Star, X } from 'lucide-react';
 import { fundDataset } from '../data/fundDataset';
 import { formatInr, formatPercent, generateCopilotResponse } from '../utils/analysisEngine';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+
+const amcLogoMap = [
+  { match: ['hdfc'], name: 'HDFC Mutual Fund', initials: 'HDFC', logo: 'https://logo.clearbit.com/hdfcfund.com' },
+  { match: ['axis'], name: 'Axis Mutual Fund', initials: 'Axis', logo: 'https://logo.clearbit.com/axismf.com' },
+  { match: ['sbi'], name: 'SBI Mutual Fund', initials: 'SBI', logo: 'https://logo.clearbit.com/sbimf.com' },
+  { match: ['icici prudential', 'icici'], name: 'ICICI Prudential Mutual Fund', initials: 'ICICI', logo: 'https://logo.clearbit.com/icicipruamc.com' },
+  { match: ['parag parikh', 'ppfas'], name: 'Parag Parikh Mutual Fund', initials: 'PPFAS', logo: 'https://logo.clearbit.com/ppfas.com' },
+  { match: ['nippon'], name: 'Nippon India Mutual Fund', initials: 'Nippon', logo: 'https://logo.clearbit.com/nipponindiaim.com' },
+  { match: ['mirae'], name: 'Mirae Asset Mutual Fund', initials: 'Mirae', logo: 'https://logo.clearbit.com/miraeassetmf.co.in' },
+  { match: ['kotak'], name: 'Kotak Mutual Fund', initials: 'Kotak', logo: 'https://logo.clearbit.com/kotakmf.com' },
+  { match: ['canara robeco', 'canara'], name: 'Canara Robeco Mutual Fund', initials: 'Canara', logo: 'https://logo.clearbit.com/canararobeco.com' }
+];
+
+function getAmcLogo(fund) {
+  const name = `${fund?.fundName || ''} ${fund?.displayName || ''} ${fund?.slug || ''}`.toLowerCase();
+  return amcLogoMap.find((item) => item.match.some((token) => name.includes(token))) || {
+    name: 'Mutual fund company',
+    initials: 'MF',
+    logo: null
+  };
+}
 
 export function Button({ children, variant = 'primary', className = '', ...props }) {
   return (
@@ -110,12 +131,14 @@ export function FundCard({ fund, onView, onToggleWatch, onAdd, watched }) {
 export function TrendingCard({ fund, onClick }) {
   const latestNav = fund?.latestNav || fund?.variants?.direct?.nav || 0;
   const returnVal = fund?.fiveYearReturn || 12.5;
+  const logo = getAmcLogo(fund);
   
   return (
     <Card className="trending-card-wrapper">
       <button className="trending-card-hitbox" onClick={onClick} />
-      <div className="trending-icon">
-        <TrendingUp size={16} />
+      <div className="trending-logo" aria-label={logo.name}>
+        {logo.logo ? <img src={logo.logo} alt="" loading="lazy" onError={(event) => event.currentTarget.remove()} /> : null}
+        <span>{logo.initials}</span>
       </div>
       <div className="trending-info">
         <strong>{fund?.fundName || fund?.displayName}</strong>

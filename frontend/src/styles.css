@@ -105,9 +105,24 @@
 
 .score-text {
   position: absolute;
-  font-size: 0.72rem;
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  line-height: 1;
+  text-align: center;
   font-weight: 800;
   color: var(--accent);
+}
+
+.score-text strong {
+  font-size: 0.72rem;
+}
+
+.score-text small {
+  font-size: 0.48rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .match-info {
@@ -179,6 +194,8 @@
 
 .trending-section {
   padding: 24px !important;
+  display: flex;
+  flex-direction: column;
 }
 
 .section-head {
@@ -197,14 +214,16 @@
 
 .trending-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+  flex: 1;
+  grid-auto-rows: minmax(92px, 1fr);
   min-width: 0;
 }
 
 @media (max-width: 1400px) {
   .trending-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -239,6 +258,12 @@
   min-width: 0;
 }
 
+.trending-card-wrapper {
+  min-height: 92px;
+  padding: 16px !important;
+  gap: 14px;
+}
+
 .trending-card-wrapper:hover, .mini-holding-card-wrapper:hover {
   border-color: var(--accent) !important;
   transform: translateY(-2px);
@@ -262,16 +287,38 @@
   color: var(--text-muted);
 }
 
-.trending-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--accent-light);
-  color: var(--accent);
+.trending-logo {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.06);
+}
+
+.trending-logo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 7px;
+  background: #fff;
+}
+
+.trending-logo span {
+  padding: 0 5px;
+  color: var(--accent);
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
 }
 
 .trending-info {
@@ -281,10 +328,13 @@
 
 .trending-info strong {
   display: block;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-main);
-  white-space: nowrap;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -292,8 +342,9 @@
 .trending-metrics {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .trending-metrics span {
