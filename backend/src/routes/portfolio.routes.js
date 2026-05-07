@@ -3,6 +3,7 @@ import { protect } from '../middleware/auth.middleware.js';
 import { Portfolio } from '../models/Portfolio.js';
 
 import { analyzePortfolio } from '../services/portfolioAnalysis.service.js';
+import { generatePortfolioAIInsights } from '../services/aiInsight.service.js';
 
 const router = express.Router();
 
@@ -18,6 +19,19 @@ router.post('/analyze', async (req, res) => {
     res.json(results);
   } catch (error) {
     res.status(500).json({ message: 'Analysis Error', error: error.message });
+  }
+});
+
+// @desc    Generate AI insights for a portfolio
+// @route   POST /api/portfolio/insights/ai
+// @access  Public
+router.post('/insights/ai', async (req, res) => {
+  try {
+    const { portfolioData, userPreferences } = req.body;
+    const insights = await generatePortfolioAIInsights(portfolioData, userPreferences);
+    res.json(insights);
+  } catch (error) {
+    res.status(500).json({ message: 'AI Insight Error', error: error.message });
   }
 });
 

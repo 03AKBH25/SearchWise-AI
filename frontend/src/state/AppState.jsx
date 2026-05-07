@@ -22,6 +22,8 @@ export function AppStateProvider({ children }) {
   const [trendingFunds, setTrendingFunds] = useState([]);
   const [exploreResults, setExploreResults] = useState([]);
   const [personalizedRecommendations, setPersonalizedRecommendations] = useState(null);
+  const [aiInsights, setAiInsights] = useState([]);
+  const [isAiThinking, setIsAiThinking] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [watchlist, setWatchlist] = useState(['nippon-nifty-50', 'kotak-corporate-bond', 'mirae-asset-hybrid']);
   const [calculatorState, setCalculatorState] = useState(null);
@@ -125,6 +127,31 @@ export function AppStateProvider({ children }) {
     return () => clearTimeout(timer);
   }, [portfolio]);
 
+  // Fetch AI Insights
+  useEffect(() => {
+    if (!validatedResults) {
+      setAiInsights([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsAiThinking(true);
+      try {
+        const { data } = await axios.post(`${API_URL}/portfolio/insights/ai`, { 
+          portfolioData: validatedResults,
+          userPreferences: user?.preferences || {} 
+        });
+        setAiInsights(data);
+      } catch (error) {
+        console.warn('AI Insights failed', error);
+      } finally {
+        setIsAiThinking(false);
+      }
+    }, 1200); // Wait a bit more for AI to avoid too many calls
+
+    return () => clearTimeout(timer);
+  }, [validatedResults, user]);
+
   async function logout() {
     try {
       await axios.post(`${API_URL}/auth/logout`);
@@ -153,7 +180,7 @@ export function AppStateProvider({ children }) {
   
   // Merge instant results with validated data if available
   const results = useMemo(() => {
-    if (!validatedResults) return { ...instantResults, isValidated: false };
+    if (!validatedResults || !Array.isArray(validatedResults.funds)) return { ...instantResults, isValidated: false };
     
     // Check if validated results match current portfolio count to avoid stale data during race
     if (validatedResults.funds.length !== portfolio.length) {
@@ -199,6 +226,8 @@ export function AppStateProvider({ children }) {
     personalizedRecommendations,
     isSearching,
     searchUniverse,
+    aiInsights,
+    isAiThinking,
     calculatorState,
     setCalculatorState
   };

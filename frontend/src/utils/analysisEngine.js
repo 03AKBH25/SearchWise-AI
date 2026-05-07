@@ -1,5 +1,44 @@
 import { fundDataset } from '../data/fundDataset';
 
+// Local cache for funds fetched from the DB during a session (e.g. for guest users)
+let extendedDataset = [];
+
+export function addToExtendedDataset(fund) {
+  if (!fund) return;
+  const id = fund.slug || fund.id || fund.baseFundId;
+  if (!extendedDataset.find(f => f.id === id)) {
+    extendedDataset.push(mapBackendFundToLocal(fund));
+  }
+}
+
+export function mapBackendFundToLocal(f) {
+  if (!f) return null;
+  // If it's already in local format, return it
+  if (f.id && f.directExpense !== undefined) return f;
+
+  const id = f.slug || f.id || f.baseFundId;
+  const direct = f.variants?.direct || f.variants?.[0] || {};
+  const regular = f.variants?.regular || f.variants?.[1] || {};
+
+  return {
+    id,
+    key: (f.displayName || f.fundName || '').toLowerCase(),
+    fundName: f.displayName || f.fundName,
+    category: f.category || 'Mixed',
+    assetClass: f.assetClass || 'Equity',
+    risk: f.riskLabel || f.risk || 'Moderate',
+    directExpense: direct.expenseRatio || 0.6,
+    regularExpense: regular.expenseRatio || 1.5,
+    expectedReturn: f.expectedGrossReturn ? f.expectedGrossReturn * 100 : 10,
+    oneYearReturn: f.oneYearReturn || 12,
+    threeYearReturn: f.threeYearReturn || 11,
+    fiveYearReturn: f.fiveYearReturn || 10.5,
+    latestNav: direct.nav || f.latestNav,
+    navDate: direct.navDate || f.navDate,
+    benchmark: f.benchmark || 'NIFTY 50 TRI'
+  };
+}
+
 const DEFAULT_FUND = {
   id: 'comparable-fund',
   fundName: 'Comparable Diversified Fund',
@@ -46,14 +85,14 @@ export function detectPlan(name) {
 }
 
 export function findFundById(id) {
-  return fundDataset.find((fund) => fund.id === id) || null;
+  return fundDataset.find((fund) => fund.id === id) || extendedDataset.find((fund) => fund.id === id) || null;
 }
 
 export function findFund(nameOrId) {
   const byId = findFundById(nameOrId);
   if (byId) return byId;
   const text = normalize(nameOrId);
-  const match = fundDataset.find((fund) => text.includes(fund.key) || fund.key.includes(text));
+  const match = [...fundDataset, ...extendedDataset].find((fund) => text.includes(fund.key) || fund.key.includes(text));
   return match || { ...DEFAULT_FUND, fundName: nameOrId || DEFAULT_FUND.fundName };
 }
 

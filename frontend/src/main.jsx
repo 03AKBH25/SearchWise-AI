@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import axios from 'axios';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowRight,
@@ -57,10 +58,24 @@ import {
   TrendingCard,
   PortfolioMiniCard
 } from './components/ui';
-import { analyzeHolding, analyzePortfolio, calculateLumpsum, findFundById, formatInr, formatPercent, futureValue, generateCopilotResponse, getFundAlternatives, ratioLabel } from './utils/analysisEngine';
+import {
+  addToExtendedDataset,
+  analyzeHolding,
+  analyzePortfolio,
+  calculateLumpsum,
+  findFundById,
+  formatInr,
+  formatPercent,
+  futureValue,
+  generateCopilotResponse,
+  getFundAlternatives,
+  ratioLabel
+} from './utils/analysisEngine';
 import AuthPage from './components/AuthPage';
 import OnboardingPage from './components/OnboardingPage';
 import './styles.css';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
 function EmptyState({ title, description, actionText, onAction, image = "/empty_portfolio.png" }) {
   return (
@@ -666,6 +681,69 @@ function GuestExperience({ path, theme, setTheme }) {
   );
 }
 
+function CustomFundSearch({ value, onChange, onSelect, isSearching, options }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = React.useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = options.filter(f => 
+    (f.displayName || f.fundName || '').toLowerCase().includes(value.toLowerCase())
+  ).slice(0, 8);
+
+  return (
+    <div className="search-field-wrapper" ref={containerRef}>
+      <input 
+        value={value} 
+        onChange={(e) => {
+          onChange(e.target.value);
+          setIsOpen(true);
+        }} 
+        onFocus={() => setIsOpen(true)}
+        placeholder="Search fund name..." 
+        autoComplete="off"
+      />
+      {isOpen && (value.length > 0 || isSearching) && (
+        <div className="custom-search-dropdown">
+          {isSearching ? (
+            <div className="dropdown-loader">
+              <div className="loader-spinner" />
+              <span>Searching universe...</span>
+            </div>
+          ) : filteredOptions.length > 0 ? (
+            filteredOptions.map((fund) => (
+              <button 
+                key={fund.slug || fund.id} 
+                className="dropdown-item"
+                type="button"
+                onClick={() => {
+                  onSelect(fund);
+                  setIsOpen(false);
+                }}
+              >
+                <strong>{fund.displayName || fund.fundName}</strong>
+                <span>{fund.category} • {fund.riskLabel || fund.risk || 'Moderate'}</span>
+              </button>
+            ))
+          ) : value.length > 2 ? (
+            <div className="dropdown-empty">
+              <span>No funds found for "{value}"</span>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PortfolioInputPage() {
   const { setGuestPortfolio, setGuestResults, setPortfolio } = useAppState();
   const [rows, setRows] = useState([
@@ -673,14 +751,48 @@ function PortfolioInputPage() {
     { id: crypto.randomUUID(), fundId: 'parag-parikh-flexi-cap', fundName: 'Parag Parikh Flexi Cap Fund', amount: 180000, years: 5, plan: 'Direct' }
   ]);
   const [error, setError] = useState('');
+  const [dynamicOptions, setDynamicOptions] = useState(fundDataset);
+  const [isSearching, setIsSearching] = useState(false);
+
+  const searchFunds = useCallback(async (query) => {
+    if (!query || query.length < 3) return;
+    setIsSearching(true);
+    try {
+      const { data } = await axios.get(`${API_URL}/funds/search`, { params: { q: query, limit: 10 } });
+      if (data.funds) {
+        setDynamicOptions((prev) => {
+          const combined = [...prev, ...data.funds];
+          const unique = Array.from(new Map(combined.map(f => [f.slug || f.id, f])).values());
+          return unique;
+        });
+        data.funds.forEach(f => addToExtendedDataset(f));
+      }
+    } catch (err) {
+      console.warn('Guest search failed', err);
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
 
   function updateRow(id, field, value) {
     setRows((current) => current.map((row) => row.id === id ? { ...row, [field]: value } : row));
   }
 
+  function handleFundSelect(id, fund) {
+    setRows((current) => current.map((row) => row.id === id ? { 
+      ...row, 
+      fundName: fund.displayName || fund.fundName, 
+      fundId: fund.slug || fund.id 
+    } : row));
+  }
+
   function updateFundName(id, value) {
-    const matched = fundDataset.find((fund) => fund.fundName === value);
-    setRows((current) => current.map((row) => row.id === id ? { ...row, fundName: value, fundId: matched?.id || '' } : row));
+    setRows((current) => current.map((row) => row.id === id ? { ...row, fundName: value } : row));
+
+    if (value.length > 2) {
+      if (window.searchTimeout) clearTimeout(window.searchTimeout);
+      window.searchTimeout = setTimeout(() => searchFunds(value), 400);
+    }
   }
 
   function addRow() {
@@ -693,7 +805,7 @@ function PortfolioInputPage() {
 
   function buildPortfolio() {
     return rows.map((row) => {
-      const fund = findFundById(row.fundId) || fundDataset[0];
+      const fund = findFundById(row.fundId) || findFundById('hdfc-flexi-cap');
       const plan = row.plan || 'Regular';
       return {
         fundId: fund.id,
@@ -706,11 +818,11 @@ function PortfolioInputPage() {
     });
   }
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
     const invalid = rows.some((row) => !row.fundId || Number(row.amount) <= 0 || Number(row.years || 0) <= 0);
     if (invalid) {
-      setError('Choose a fund from the search list, then add amount and years held for every row.');
+      setError('Choose a fund from the list, then add amount and years held for every row.');
       return;
     }
     setError('');
@@ -723,11 +835,8 @@ function PortfolioInputPage() {
 
   return (
     <section className="guest-stack">
-      <PageHeader eyebrow="Guest mode" title="Add Your Portfolio" description="Enter a few holdings to get a private preview. Nothing is saved until you create an account." />
+      <PageHeader eyebrow="Guest mode" title="Add Your Portfolio" description="Enter a few holdings to get a private preview. We search thousands of funds in real-time." />
       <form className="portfolio-input-form" onSubmit={submit}>
-        <datalist id="fund-options">
-          {fundDataset.map((fund) => <option key={fund.id} value={fund.fundName} />)}
-        </datalist>
         <div className="input-row-head">
           <span>Fund</span>
           <span>Plan</span>
@@ -739,7 +848,13 @@ function PortfolioInputPage() {
           <Card className="holding-input-row" key={row.id}>
             <label>
               <span>Fund name</span>
-              <input list="fund-options" value={row.fundName} onChange={(event) => updateFundName(row.id, event.target.value)} placeholder="Search fund name" />
+              <CustomFundSearch 
+                value={row.fundName}
+                onChange={(val) => updateFundName(row.id, val)}
+                onSelect={(fund) => handleFundSelect(row.id, fund)}
+                isSearching={isSearching}
+                options={dynamicOptions}
+              />
             </label>
             <label>
               <span>Plan</span>
@@ -811,7 +926,7 @@ function ProcessingPage() {
 }
 
 function AnalysisPreviewPage({ mode }) {
-  const { isAuthenticated, guestResults, guestPortfolio, setGuestPortfolio, setGuestResults, setSelectedFundId } = useAppState();
+  const { isAuthenticated, guestResults, guestPortfolio, setGuestPortfolio, setGuestResults, setSelectedFundId, aiInsights, isAiThinking } = useAppState();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const sampleResults = useMemo(() => analyzePortfolio(samplePortfolio), []);
   const results = mode === 'sample' ? sampleResults : guestResults;
@@ -864,17 +979,33 @@ function AnalysisPreviewPage({ mode }) {
         <SummaryCard label="Funds needing action" value={results.actionCount} detail="Ranked by priority" tone={results.actionCount ? 'warn' : 'good'} icon={Sparkles} />
       </div>
 
-      <Card className={`health-card ${isGoodPortfolio ? 'good' : 'warn'}`}>
+      <Card className={`health-card ai-insights-section ${isGoodPortfolio ? 'good' : 'warn'}`}>
         <div>
-          <span className="eyebrow">{isGoodPortfolio ? 'Good portfolio' : 'Issues detected'}</span>
-          <h2>{healthScore}/100 health score</h2>
-          <p>{isGoodPortfolio ? 'Your visible holdings are already cost-aware. Keep monitoring overlap, tax impact, and category concentration.' : 'The biggest decision is to review high-cost Regular variants before optimizing anything else.'}</p>
+          <span className="eyebrow">AI Health Audit</span>
+          <h2>{healthScore}/100 portfolio score</h2>
+          <p>{isAiThinking ? 'Gemini is auditing your holdings...' : 'SwitchWise AI has analyzed your inputs against market benchmarks and your expected growth profile.'}</p>
         </div>
-        <div className="health-list">
-          {(isGoodPortfolio
-            ? ['Most holdings look cost-efficient', 'No urgent switches detected', 'Expense drag appears controlled']
-            : ['Regular plan leakage found', 'High expense gaps compound over time', 'Priority fixes are concentrated in a few funds']
-          ).map((item) => <span key={item}><CircleCheckBig size={15} />{item}</span>)}
+        <div className="health-list ai-preview-list">
+          {isAiThinking ? (
+            <div className="ai-preview-loading">
+              <Loader2 className="animate-spin" size={16} />
+              <span>Generating objective insights...</span>
+            </div>
+          ) : aiInsights.length > 0 ? (
+            aiInsights.map((insight, idx) => (
+              <span key={idx} className={`ai-pill ${insight.type}`}>
+                {insight.type === 'positive' ? <CircleCheckBig size={15} /> : 
+                 insight.type === 'critical' ? <Flame size={15} /> : 
+                 <Info size={15} />}
+                {insight.title}: {insight.description}
+              </span>
+            ))
+          ) : (
+            (isGoodPortfolio
+              ? ['Most holdings look cost-efficient', 'No urgent switches detected', 'Expense drag appears controlled']
+              : ['Regular plan leakage found', 'High expense gaps detected', 'Action recommended for priority funds']
+            ).map((item) => <span key={item}><CircleCheckBig size={15} />{item}</span>)
+          )}
         </div>
       </Card>
 
@@ -1063,7 +1194,7 @@ function GuestCopilotAnswer({ content }) {
 }
 
 function DashboardPage() {
-  const { results, user, setSelectedFundId } = useAppState();
+  const { results, user, setSelectedFundId, aiInsights, isAiThinking } = useAppState();
   const [expandedInsight, setExpandedInsight] = useState(null);
 
   // Derived decision data
@@ -1198,41 +1329,34 @@ function DashboardPage() {
           </div>
         </Card>
 
-        {/* INSIGHTS WITH WHY LAYER */}
-        <Card className="panel insights-panel wide">
-          <SectionTitle title="Critical Observations" />
-          <div className="insight-expandable-list">
-            {results.insights.map((insight) => (
-              <div 
-                key={insight.id} 
-                className={`insight-expandable-item ${expandedInsight === insight.id ? 'expanded' : ''}`}
-                onClick={() => setExpandedInsight(expandedInsight === insight.id ? null : insight.id)}
-              >
-                <div className="insight-main">
-                  <div className="insight-icon-wrap"><Flame size={18} /></div>
-                  <div className="insight-text">
-                    <strong>{insight.title}</strong>
+        {/* AI SMART INSIGHTS */}
+        <Card className="panel insights-panel wide ai-insights-section">
+          <SectionTitle title="AI Smart Insights" />
+          <div className="ai-insights-container">
+            {isAiThinking ? (
+              <div className="ai-loading-state">
+                <div className="ai-spinner" />
+                <span>SwitchWise AI is auditing your portfolio...</span>
+              </div>
+            ) : aiInsights.length > 0 ? (
+              <div className="ai-insight-list">
+                {aiInsights.map((insight, idx) => (
+                  <div key={idx} className={`ai-insight-card ${insight.type}`}>
+                    <div className="ai-insight-header">
+                      {insight.type === 'positive' ? <CheckCircle2 size={18} className="icon-positive" /> : 
+                       insight.type === 'critical' ? <Flame size={18} className="icon-critical" /> : 
+                       <Info size={18} className="icon-info" />}
+                      <strong>{insight.title}</strong>
+                    </div>
                     <p>{insight.description}</p>
                   </div>
-                  <ChevronDown className="expand-chevron" size={18} />
-                </div>
-                {expandedInsight === insight.id && (
-                  <div className="insight-details landing-reveal">
-                    <div className="why-layer">
-                      <h4>Why this is happening?</h4>
-                      <p>Regular plans usually include distribution costs. Those costs are reflected through NAV and can reduce long-term net returns.</p>
-                    </div>
-                    <div className="risk-cost-layer">
-                      <h4>Cost of Action</h4>
-                      <div className="risk-pills">
-                        <span><Scale size={14} /> Exit Load: 1% if &lt; 1yr</span>
-                        <span><BadgeIndianRupee size={14} /> Tax: 10-15% on gains</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                ))}
               </div>
-            ))}
+            ) : (
+              <div className="ai-empty-state">
+                <p>Calculations complete. Waiting for AI auditor to summarize findings...</p>
+              </div>
+            )}
           </div>
         </Card>
 
