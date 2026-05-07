@@ -1703,7 +1703,7 @@ function GoalDiscoveryModal({ isOpen, onClose, onApply }) {
   const methods = ['SIP', 'Lump sum', 'Both'];
   const preferences = ['Lower risk', 'Higher growth', 'Stable returns', 'Lower cost', 'Tax efficiency'];
 
-  if (!isOpen) return null;
+
 
   const goalMap = {
     'Wealth creation': 'wealth_creation',
@@ -1723,20 +1723,65 @@ function GoalDiscoveryModal({ isOpen, onClose, onApply }) {
     '10+ years': 12
   };
 
-  const handleApply = () => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState('Analyzing intent...');
+
+  useEffect(() => {
+    if (isLoading) {
+      const texts = [
+        'Analyzing investment intent...',
+        `Scanning universe for ${formData.goal}...`,
+        'Matching risk parameters...',
+        'Evaluating cost-efficiency...',
+        'Finalizing best match funds...'
+      ];
+      let i = 0;
+      const interval = setInterval(() => {
+        i = (i + 1) % texts.length;
+        setLoadingText(texts[i]);
+      }, 800);
+      return () => clearInterval(interval);
+    }
+  }, [isLoading, formData.goal]);
+
+
+  const handleApply = async () => {
     const payload = {
       goalType: goalMap[formData.goal],
       horizonYears: horizonMap[formData.horizon],
       riskComfort: formData.risk,
       preference: formData.preference
     };
-    onApply(payload);
-    onClose();
+    setIsLoading(true);
+    await new Promise(r => setTimeout(r, 2200));
+    try {
+      await onApply(payload);
+      onClose();
+    } finally {
+      setIsLoading(false);
+    }
+
+
   };
 
+  if (!isOpen) return null;
+
   return createPortal(
+
     <div className="modal-backdrop goal-modal-backdrop">
       <Card className="goal-discovery-modal landing-reveal">
+        {isLoading ? (
+          <div className="goal-loading-state landing-reveal">
+            <div className="discovery-loader">
+              <div className="loader-orbit"></div>
+              <Sparkles size={32} className="loader-sparkle" />
+            </div>
+            <h3>Finding Your Best Match</h3>
+            <p>{loadingText}</p>
+          </div>
+        ) : (
+          <>
+
         <div className="modal-close-bar">
           <button onClick={onClose} className="icon-button-clean">×</button>
         </div>
@@ -1800,7 +1845,10 @@ function GoalDiscoveryModal({ isOpen, onClose, onApply }) {
             <Button onClick={handleApply}>Show Best Match Funds <ArrowRight size={18} /></Button>
           </div>
         </div>
+          </>
+        )}
       </Card>
+
     </div>,
     document.body
   );
