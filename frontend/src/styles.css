@@ -4941,10 +4941,135 @@ th {
 .ai-pill.critical { color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--surface-2)); }
 .ai-pill.info { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface-2)); }
 
-.ai-preview-loading {
+/* Goal Discovery UI */
+.goal-modal-backdrop {
+  z-index: 2100 !important;
+}
+
+.goal-discovery-modal {
+  width: 100%;
+  max-width: 680px;
+  background: var(--surface);
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  padding: 40px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.25);
+  position: relative;
+}
+
+.goal-modal-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.icon-ring-ai {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, var(--accent), #7c3aed);
+  color: white;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 20px;
+  justify-content: center;
+  border-radius: 16px;
+  margin: 0 auto 16px;
+  box-shadow: 0 8px 20px rgba(18, 124, 102, 0.3);
+}
+
+.goal-modal-header h2 {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+
+.goal-modal-header p {
   color: var(--muted);
+  font-size: 1.05rem;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.goal-questions-grid {
+  display: grid;
+  gap: 28px;
+}
+
+.goal-question label {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.pill-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pill {
+  padding: 8px 18px;
+  border-radius: 50px;
+  background: var(--surface-2);
+  border: 1.5px solid var(--line);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pill:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  box-shadow: 0 4px 12px rgba(18, 124, 102, 0.25);
+}
+
+.goal-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+/* Explore Page "Refine" Button */
+.btn-refine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-weight: 700 !important;
+  color: var(--accent) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent) !important;
+  white-space: nowrap;
+}
+
+.btn-refine:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent) !important;
+  border-color: var(--accent) !important;
+}
+
+.personalized-section .section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.head-left {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
 }

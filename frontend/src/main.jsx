@@ -36,6 +36,7 @@ import {
   CheckCircle2,
   Calculator,
   Loader2,
+  Settings2,
   X
 } from 'lucide-react';
 
@@ -1013,7 +1014,7 @@ function AnalysisPreviewPage({ mode }) {
         <Card className="panel">
           <SectionTitle title="Priority Fixes" />
           <div className="priority-list">
-            {(priorityFunds.length ? priorityFunds : results.funds.slice(0, 3)).map((fund) => (
+            {(priorityFunds.length ? priorityFunds : (results?.funds || []).slice(0, 3)).map((fund) => (
               <button key={fund.id} className="priority-fund" onClick={() => openFund(fund)}>
                 <div>
                   <strong>{fund.fundName}</strong>
@@ -1200,7 +1201,7 @@ function DashboardPage() {
   // Derived decision data
   const healthScore = Math.max(58, Math.min(96, Math.round(92 - (results.totalLoss / Math.max(1, results.totalInvested)) * 180 - results.actionCount * 7)));
   
-  const priorityFunds = [...results.funds]
+  const priorityFunds = [...(results?.funds || [])]
     .filter(f => f.status === 'Needs Action')
     .sort((a, b) => b.lifetimeLoss - a.lifetimeLoss)
     .slice(0, 3);
@@ -1686,8 +1687,127 @@ function PortfolioPage({ onAddFund }) {
   );
 }
 
+function GoalDiscoveryModal({ isOpen, onClose, onApply }) {
+  const [formData, setFormData] = useState({
+    goal: 'Wealth creation',
+    horizon: '5–10 years',
+    risk: 'Moderate',
+    method: 'SIP',
+    preference: 'Higher growth'
+  });
+
+  const goals = ['Wealth creation', 'Retirement', 'Passive income', 'Tax saving', 'Emergency reserve', 'Child education', 'Short-term parking'];
+  const horizons = ['< 1 year', '1–3 years', '3–5 years', '5–10 years', '10+ years'];
+  const risks = ['Low', 'Moderate', 'Aggressive'];
+  const methods = ['SIP', 'Lump sum', 'Both'];
+  const preferences = ['Lower risk', 'Higher growth', 'Stable returns', 'Lower cost', 'Tax efficiency'];
+
+  if (!isOpen) return null;
+
+  const goalMap = {
+    'Wealth creation': 'wealth_creation',
+    'Retirement': 'retirement',
+    'Passive income': 'passive_income',
+    'Tax saving': 'tax_saving',
+    'Emergency reserve': 'emergency_reserve',
+    'Child education': 'child_education',
+    'Short-term parking': 'short_term'
+  };
+
+  const horizonMap = {
+    '< 1 year': 1,
+    '1–3 years': 2,
+    '3–5 years': 4,
+    '5–10 years': 7,
+    '10+ years': 12
+  };
+
+  const handleApply = () => {
+    const payload = {
+      goalType: goalMap[formData.goal],
+      horizonYears: horizonMap[formData.horizon],
+      riskComfort: formData.risk,
+      preference: formData.preference
+    };
+    onApply(payload);
+    onClose();
+  };
+
+  return (
+    <div className="modal-backdrop goal-modal-backdrop">
+      <Card className="goal-discovery-modal landing-reveal">
+        <div className="modal-close-bar">
+          <button onClick={onClose} className="icon-button-clean">×</button>
+        </div>
+        
+        <div className="goal-modal-content">
+          <div className="goal-modal-header">
+            <div className="icon-ring-ai"><Sparkles size={24} /></div>
+            <h2>Refine Your Strategy</h2>
+            <p>Tell us what you're aiming for, and we'll suggest the best funds for that specific goal.</p>
+          </div>
+
+          <div className="goal-questions-grid">
+            <div className="goal-question">
+              <label>What are you primarily investing for?</label>
+              <div className="pill-group">
+                {goals.map(g => (
+                  <button key={g} className={`pill ${formData.goal === g ? 'active' : ''}`} onClick={() => setFormData({...formData, goal: g})}>{g}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="goal-question">
+              <label>How long do you plan to stay invested?</label>
+              <div className="pill-group">
+                {horizons.map(h => (
+                  <button key={h} className={`pill ${formData.horizon === h ? 'active' : ''}`} onClick={() => setFormData({...formData, horizon: h})}>{h}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="goal-question">
+              <label>How comfortable are you with market fluctuations?</label>
+              <div className="pill-group">
+                {risks.map(r => (
+                  <button key={r} className={`pill ${formData.risk === r ? 'active' : ''}`} onClick={() => setFormData({...formData, risk: r})}>{r}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="goal-question">
+              <label>How do you plan to invest?</label>
+              <div className="pill-group">
+                {methods.map(m => (
+                  <button key={m} className={`pill ${formData.method === m ? 'active' : ''}`} onClick={() => setFormData({...formData, method: m})}>{m}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="goal-question">
+              <label>What matters most to you?</label>
+              <div className="pill-group">
+                {preferences.map(p => (
+                  <button key={p} className={`pill ${formData.preference === p ? 'active' : ''}`} onClick={() => setFormData({...formData, preference: p})}>{p}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="goal-modal-footer">
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button onClick={handleApply}>Show Best Match Funds <ArrowRight size={18} /></Button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function ExplorePage({ onAddFund }) {
-  const { exploreResults, results, watchlist, setWatchlist, isSearching, searchUniverse, setSelectedFundId, trendingFunds, user, personalizedRecommendations } = useAppState();
+  const { exploreResults, results, watchlist, setWatchlist, isSearching, searchUniverse, setSelectedFundId, trendingFunds, user, personalizedRecommendations, fetchPersonalizedRecommendations } = useAppState();
+  const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
+  const [activeGoal, setActiveGoal] = useState(null);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const [risk, setRisk] = useState('All');
@@ -1744,11 +1864,16 @@ function ExplorePage({ onAddFund }) {
         {personalizedRecommendations && personalizedRecommendations.candidates?.length > 0 && (
           <Card className="personalized-section landing-reveal">
             <div className="section-head">
-              <Sparkles size={18} className="text-primary" />
-              <div className="head-content">
-                <h3>Investors Like You</h3>
-                <p>Funds frequently selected by users with a <strong>{user?.preferences?.goal || 'Wealth'}</strong> goal and <strong>{user?.preferences?.risk || 'Moderate'}</strong> risk profile.</p>
+              <div className="head-left">
+                <Sparkles size={18} className="text-primary" />
+                <div className="head-content">
+                  <h3>{activeGoal ? `Recommended for ${activeGoal}` : 'Investors Like You'}</h3>
+                  <p>{activeGoal ? `Specially curated funds based on your current priority.` : `Funds frequently selected by users with a ${user?.preferences?.goal || 'Wealth'} goal and ${user?.preferences?.risk || 'Moderate'} risk profile.`}</p>
+                </div>
               </div>
+              <Button variant="ghost" className="btn-refine" onClick={() => setIsGoalModalOpen(true)}>
+                <Settings2 size={16} /> Refine by Goal
+              </Button>
             </div>
             <div className="personalized-grid">
               {personalizedRecommendations.candidates.map(candidate => (
@@ -1818,11 +1943,19 @@ function ExplorePage({ onAddFund }) {
               onView={() => openFund(id)} 
               watched={(watchlist || []).includes(id)} 
               onToggleWatch={() => toggleWatch(id)} 
-              onAdd={results.funds.some(f => f.baseFundId === id) ? null : () => onAddFund(fund)}
+              onAdd={(results?.funds || []).some(f => f.baseFundId === id) ? null : () => onAddFund(fund)}
             />
           );
         })}
       </div>
+      <GoalDiscoveryModal 
+        isOpen={isGoalModalOpen} 
+        onClose={() => setIsGoalModalOpen(false)} 
+        onApply={(payload) => {
+          fetchPersonalizedRecommendations(payload);
+          setActiveGoal(payload.goalType.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
+        }}
+      />
     </section>
   );
 }

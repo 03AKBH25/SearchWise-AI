@@ -9,29 +9,54 @@ const currency = new Intl.NumberFormat('en-IN', {
 });
 
 const goalProfiles = {
+  wealth_creation: {
+    label: 'Wealth creation',
+    categories: ['Small Cap', 'Flexi Cap', 'Large Cap'],
+    riskFloor: 4,
+    horizon: 7
+  },
+  retirement: {
+    label: 'Retirement',
+    categories: ['Flexi Cap', 'Large Cap', 'Dynamic Asset Allocation'],
+    riskFloor: 3,
+    horizon: 10
+  },
+  passive_income: {
+    label: 'Passive income',
+    categories: ['Large Cap', 'Dynamic Asset Allocation'],
+    riskFloor: 2,
+    horizon: 5
+  },
+  tax_saving: {
+    label: 'Tax saving',
+    categories: ['ELSS', 'Flexi Cap'],
+    riskFloor: 3,
+    horizon: 3
+  },
+  emergency_reserve: {
+    label: 'Emergency reserve',
+    categories: ['Liquid', 'Ultra Short Duration', 'Low Duration'],
+    riskFloor: 1,
+    horizon: 1
+  },
+  child_education: {
+    label: 'Child education',
+    categories: ['Flexi Cap', 'Large Cap'],
+    riskFloor: 3,
+    horizon: 8
+  },
+  short_term: {
+    label: 'Short-term parking',
+    categories: ['Liquid', 'Low Duration', 'Dynamic Asset Allocation'],
+    riskFloor: 1,
+    horizon: 2
+  },
+  // Legacy support
   wealth: {
     label: 'Long-term wealth',
     categories: ['Flexi Cap', 'Large Cap', 'Small Cap'],
     riskFloor: 3,
     horizon: 7
-  },
-  retirement: {
-    label: 'Retirement corpus',
-    categories: ['Flexi Cap', 'Large Cap', 'Dynamic Asset Allocation'],
-    riskFloor: 2,
-    horizon: 10
-  },
-  balanced: {
-    label: 'Balanced growth',
-    categories: ['Dynamic Asset Allocation', 'Large Cap', 'Flexi Cap'],
-    riskFloor: 1,
-    horizon: 4
-  },
-  tax_review: {
-    label: 'Existing fund review',
-    categories: ['Flexi Cap', 'Large Cap', 'Small Cap', 'Dynamic Asset Allocation'],
-    riskFloor: 1,
-    horizon: 3
   }
 };
 
@@ -95,12 +120,32 @@ function scoreSwitch(fund, currentVariant, years, amount, monthlyContribution) {
 
 function scoreCandidate(fund, payload) {
   const profile = profileFor(payload);
+  
+  // 1. Goal Category Fit (30 points)
   const categoryFit = profile.categories.includes(fund.category) ? 30 : 8;
-  const riskFit = Math.max(0, 20 - Math.abs(riskScore(fund) - Number(payload.riskComfort || 3)) * 6);
-  const horizonFit = Number(payload.horizonYears || profile.horizon) >= profile.horizon ? 18 : 9;
-  const costFit = Math.max(0, 16 - directVariant(fund).expenseRatio * 8);
-  const diversificationFit = fund.exposure.cash > 12 ? 8 : 12;
-  const score = Math.round(categoryFit + riskFit + horizonFit + costFit + diversificationFit);
+  
+  // 2. Risk Alignment (25 points)
+  const userRisk = payload.riskComfort === 'Aggressive' ? 5 : payload.riskComfort === 'Moderate' ? 3 : 2;
+  const riskFit = Math.max(0, 25 - Math.abs(riskScore(fund) - userRisk) * 7);
+  
+  // 3. Horizon Suitability (15 points)
+  const userHorizon = parseInt(payload.horizonYears) || profile.horizon;
+  const horizonFit = userHorizon >= profile.horizon ? 15 : 7;
+  
+  // 4. Expense Efficiency (15 points)
+  const expense = directVariant(fund).expenseRatio;
+  let costFit = Math.max(0, 15 - expense * 8);
+  
+  // 5. Preference Bonus (15 points)
+  let preferenceBonus = 0;
+  const pref = payload.preference;
+  if (pref === 'Lower risk' && fund.riskLabel === 'Moderate') preferenceBonus = 15;
+  if (pref === 'Higher growth' && (fund.category === 'Small Cap' || fund.category === 'Flexi Cap')) preferenceBonus = 15;
+  if (pref === 'Lower cost' && expense < 0.6) preferenceBonus = 15;
+  if (pref === 'Stable returns' && fund.assetClass === 'Hybrid') preferenceBonus = 15;
+  if (pref === 'Tax efficiency' && fund.category === 'ELSS') preferenceBonus = 15;
+
+  const score = Math.round(categoryFit + riskFit + horizonFit + costFit + preferenceBonus);
 
   return {
     slug: fund.slug,

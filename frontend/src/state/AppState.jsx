@@ -64,14 +64,19 @@ export function AppStateProvider({ children }) {
     }
   }
 
-  async function fetchPersonalizedRecommendations(userData) {
-    if (!userData || !userData.preferences) return;
+  async function fetchPersonalizedRecommendations(inputData) {
+    if (!inputData) return;
+    
+    // Determine if it's raw user data or a manual discovery payload
+    const isManualDiscovery = !!inputData.goalType;
+    
     try {
-      const payload = {
-        goalType: userData.preferences.goal,
-        riskComfort: userData.preferences.risk === 'High' ? 4 : userData.preferences.risk === 'Moderate' ? 3 : 2,
-        horizonYears: parseInt(userData.preferences.horizon) || 5
+      const payload = isManualDiscovery ? inputData : {
+        goalType: inputData.preferences?.goal,
+        riskComfort: inputData.preferences?.risk === 'High' ? 4 : inputData.preferences?.risk === 'Moderate' ? 3 : 2,
+        horizonYears: parseInt(inputData.preferences?.horizon) || 5
       };
+      
       const { data } = await axios.post(`${API_URL}/funds/recommend`, payload);
       setPersonalizedRecommendations(data);
     } catch (error) {
@@ -226,6 +231,7 @@ export function AppStateProvider({ children }) {
     personalizedRecommendations,
     isSearching,
     searchUniverse,
+    fetchPersonalizedRecommendations,
     aiInsights,
     isAiThinking,
     calculatorState,
