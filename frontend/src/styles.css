@@ -638,7 +638,7 @@ select:focus {
 .top-navbar {
   position: sticky;
   top: 0;
-  z-index: 80;
+  z-index: 1000;
   height: 72px;
   display: flex;
   align-items: center;
@@ -647,7 +647,7 @@ select:focus {
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--line);
-  overflow-x: auto;
+  overflow: visible;
   scrollbar-width: none;
 }
 
@@ -658,6 +658,12 @@ select:focus {
 .top-navbar .nav-links {
   margin-left: 12px;
   margin-right: auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.top-navbar .nav-links::-webkit-scrollbar {
+  display: none;
 }
 
 .search-container {
@@ -779,6 +785,8 @@ select:focus {
   display: flex;
   align-items: center;
   gap: 8px;
+  position: relative;
+  z-index: 1001;
 }
 
 .icon-button,
@@ -3363,6 +3371,7 @@ th {
 /* User Profile Menu */
 .user-profile-menu {
   position: relative;
+  z-index: 1002;
 }
 
 .profile-dropdown {
@@ -3382,7 +3391,7 @@ th {
   visibility: hidden;
   transform: translateY(10px);
   transition: all 0.2s ease;
-  z-index: 100;
+  z-index: 1003;
 }
 
 .user-profile-menu:hover .profile-dropdown {
