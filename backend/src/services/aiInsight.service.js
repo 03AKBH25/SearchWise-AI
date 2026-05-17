@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 // Simple in-memory rate-limit cooldown: don't retry for 60 seconds after a 429
 let rateLimitCooldownUntil = 0;
@@ -80,7 +80,7 @@ export async function generatePortfolioAIInsights(portfolioData, userPreferences
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ 
+    const model = genAI.getGenerativeModel({
       model: MODEL_NAME,
       systemInstruction: SYSTEM_INSTRUCTION
     });
@@ -100,7 +100,7 @@ Generate 3 balanced insights. Return ONLY the JSON array.
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    
+
     // Check if response was blocked by safety filters
     if (!response.candidates || response.candidates.length === 0 || response.candidates[0].finishReason === 'SAFETY') {
       console.warn('AI Insights: Response blocked by safety filters');
@@ -108,14 +108,14 @@ Generate 3 balanced insights. Return ONLY the JSON array.
     }
 
     const text = response.text();
-    
+
     // Robust JSON extraction
     const start = text.indexOf('[');
     const end = text.lastIndexOf(']');
     if (start !== -1 && end !== -1) {
       return JSON.parse(text.substring(start, end + 1));
     }
-    
+
     return [];
   } catch (error) {
     if (error?.status === 429 || error?.message?.includes('429')) {
