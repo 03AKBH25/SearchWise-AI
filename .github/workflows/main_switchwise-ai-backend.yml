@@ -1,7 +1,7 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 
-name: Build and deploy Node.js app to Azure Web App - SwitchWise-AI-backend
+name: Build and deploy Node.js app to Azure Web App - switchwise-ai-backend
 
 on:
   push:
@@ -51,15 +51,15 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_76D7F5DC6BD340CC9313FCDDE45681C7 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_5D40675FAEC2441891E220F70E3AFB5D }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_C7A3A0C8B1A048B8A57D4C66161F4218 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_8036145691904CC8B792770CA439A5AB }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_AC94AF52E07148E99D8D81C8C2F586BD }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_919790BC32B94A90BA9690667CBB9D35 }}
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'SwitchWise-AI-backend'
+          app-name: 'switchwise-ai-backend'
           slot-name: 'Production'
           package: .
           
